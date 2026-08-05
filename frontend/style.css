@@ -599,6 +599,69 @@ body {
 ::-webkit-scrollbar-thumb { background: var(--surface-secondary); border-radius: 99px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--text-secondary); }
 
+/* ── Custom Dropdown (Universal Dropdown / und-dropdown) ─────────── */
+.und-dropdown {
+  position: relative;
+  width: 100%;
+}
+.und-dropdown-wrapper {
+  position: relative;
+  width: 100%;
+}
+.und-dropdown-button {
+  text-align: left;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.und-dropdown-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  display: none;
+  margin-top: 8px;
+  background: var(--surface);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--border-radius);
+  box-shadow: var(--neo-raised-lg);
+  overflow: hidden;
+  max-height: 250px;
+  overflow-y: auto;
+}
+.und-dropdown-menu.show {
+  display: block;
+  animation: slideUp 0.2s ease;
+}
+.und-dropdown-item {
+  padding: 12px 18px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: background-color 0.2s ease, color 0.2s ease;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.und-dropdown-item:hover {
+  background-color: var(--surface-secondary);
+  color: var(--primary);
+}
+.und-dropdown-item.selected {
+  background-color: var(--surface-secondary);
+  color: var(--primary);
+  font-weight: 600;
+}
+.item-opt-group .und-dropdown-item {
+  padding: 8px 12px;
+  font-size: 0.8rem;
+}
+
 /* ── Responsive ───────────────────────────────────────────────────── */
 @media (max-width: 640px) {
   .app-container { padding: 28px 16px 48px; gap: 24px; }

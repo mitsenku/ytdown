@@ -176,20 +176,22 @@ async function searchVideos(query) {
 function renderSearchResults(results) {
   const list = document.getElementById('searchList');
   const count = document.getElementById('searchCount');
-  count.textContent = `${results.length} results`;
+  count.textContent = `${results.length} result${results.length === 1 ? '' : 's'}`;
 
   if (!results.length) {
-    list.innerHTML = `<li class="history-empty"><div class="history-empty__icon">🔍</div><div>No results found</div></li>`;
+    list.innerHTML = `<li class="history-empty"><div class="history-empty__icon"><svg class="svg-icon svg-icon--lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></div><div>No results found</div></li>`;
     return;
   }
 
-  list.innerHTML = results.map((item) => `
-    <li class="search-item" data-url="${escapeAttr(item.url)}" data-title="${escapeAttr(item.title)}"
+  list.innerHTML = results.map((item, index) => {
+    const itemUrl = escapeAttr(item.url);
+    return `
+    <li class="search-item" data-url="${itemUrl}" data-title="${escapeAttr(item.title)}"
         data-thumb="${escapeAttr(item.thumbnail || '')}" data-duration="${item.duration || ''}"
         data-channel="${escapeAttr(item.channel || '')}" data-views="${item.view_count || ''}">
       <div class="search-item__header">
         <label class="neo-checkbox search-item__checkbox">
-          <input type="checkbox" class="search-checkbox" data-url="${escapeAttr(item.url)}">
+          <input type="checkbox" class="search-checkbox" data-url="${itemUrl}">
           <span class="neo-checkbox__mark"></span>
         </label>
         <div class="search-item__thumb">
@@ -202,40 +204,75 @@ function renderSearchResults(results) {
           <div class="search-item__views">${item.view_count ? formatViews(item.view_count) + ' views' : ''}</div>
         </div>
         <div class="search-item__actions">
-          <button class="btn btn--primary btn--sm search-select-btn" data-url="${escapeAttr(item.url)}">Inspect</button>
+          <button class="btn btn--primary btn--sm search-select-btn" data-url="${itemUrl}">
+            <svg class="svg-icon svg-icon--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            <span>Inspect</span>
+          </button>
         </div>
       </div>
 
-      <!-- Inline Format & Quality options per video (shown when checked) -->
-      <div class="search-item__options" id="item-options-${escapeAttr(item.url)}">
+      <!-- Inline Custom Dropdown options per video -->
+      <div class="search-item__options" id="item-options-${index}">
         <div class="item-opt-group">
           <label>Type</label>
-          <select class="neo-select item-mode-select" data-url="${escapeAttr(item.url)}">
-            <option value="video" selected>🎬 Video</option>
-            <option value="audio">🎵 Audio</option>
-          </select>
+          <div id="item-type-dropdown-${index}" class="und-dropdown"></div>
         </div>
         <div class="item-opt-group">
           <label>Quality</label>
-          <select class="neo-select item-quality-select" data-url="${escapeAttr(item.url)}">
-            <option value="best" selected>🏆 Best</option>
-            <option value="1080">1080p</option>
-            <option value="720">720p</option>
-            <option value="480">480p</option>
-            <option value="360">360p</option>
-          </select>
+          <div id="item-quality-dropdown-${index}" class="und-dropdown"></div>
         </div>
         <div class="item-opt-group">
           <label>Format</label>
-          <select class="neo-select item-format-select" data-url="${escapeAttr(item.url)}">
-            <option value="mp4" selected>MP4</option>
-            <option value="mkv">MKV</option>
-            <option value="webm">WebM</option>
-          </select>
+          <div id="item-format-dropdown-${index}" class="und-dropdown"></div>
         </div>
       </div>
     </li>
-  `).join('');
+  `}).join('');
+
+  // Render per-item custom dropdown components
+  results.forEach((item, index) => {
+    const itemState = { mode: 'video', quality: 'best', format: 'mp4' };
+    
+    function updateItemDropdowns() {
+      const opts = FORMAT_OPTIONS[itemState.mode];
+      renderUndDropdown(`item-type-dropdown-${index}`, [
+        { value: 'video', label: 'Video' },
+        { value: 'audio', label: 'Audio' }
+      ], itemState.mode, (val) => {
+        itemState.mode = val;
+        itemState.format = val === 'audio' ? 'mp3' : 'mp4';
+        updateItemDropdowns();
+        syncSelectedItem();
+      });
+
+      renderUndDropdown(`item-quality-dropdown-${index}`, opts.quality, itemState.quality, (val) => {
+        itemState.quality = val;
+        syncSelectedItem();
+      });
+
+      renderUndDropdown(`item-format-dropdown-${index}`, opts.format, itemState.format, (val) => {
+        itemState.format = val;
+        syncSelectedItem();
+      });
+    }
+
+    function syncSelectedItem() {
+      const checkbox = document.querySelector(`.search-checkbox[data-url="${CSS.escape(item.url)}"]`);
+      if (checkbox && checkbox.checked) {
+        selectedVideos.set(item.url, {
+          url: item.url,
+          title: item.title,
+          thumbnail: item.thumbnail,
+          channel: item.channel,
+          mode: itemState.mode,
+          quality: itemState.quality,
+          format: itemState.format,
+        });
+      }
+    }
+
+    updateItemDropdowns();
+  });
 }
 
 // ── Event Delegation: Search List Click ──────────────────────────────
@@ -252,16 +289,21 @@ function handleSearchListClick(e) {
 // ── Event Delegation: Search List Checkbox & Select Changes ──────────
 function handleSearchListChange(e) {
   const target = e.target;
-
-  // Checkbox toggled
   if (target.classList.contains('search-checkbox')) {
-    const url = target.dataset.url;
     const item = target.closest('.search-item');
-
+    const url = target.dataset.url;
     if (target.checked) {
-      const mode = item.querySelector('.item-mode-select').value;
-      const quality = item.querySelector('.item-quality-select').value;
-      const format = item.querySelector('.item-format-select').value;
+      const index = Array.from(document.querySelectorAll('.search-item')).indexOf(item);
+      const typeBtn = item.querySelector(`#item-type-dropdown-${index} .und-dropdown-button span`);
+      const qualityBtn = item.querySelector(`#item-quality-dropdown-${index} .und-dropdown-button span`);
+      const formatBtn = item.querySelector(`#item-format-dropdown-${index} .und-dropdown-button span`);
+
+      const mode = typeBtn?.textContent.toLowerCase().includes('audio') ? 'audio' : 'video';
+      const qualityLabel = qualityBtn?.textContent.trim() || '';
+      const formatLabel = formatBtn?.textContent.trim() || '';
+      const opts = FORMAT_OPTIONS[mode];
+      const quality = (opts.quality.find(o => o.label === qualityLabel) || opts.quality[0]).value;
+      const format = (opts.format.find(o => o.label === formatLabel) || opts.format[0]).value;
 
       selectedVideos.set(url, {
         url,
@@ -278,70 +320,46 @@ function handleSearchListChange(e) {
       item.classList.remove('selected');
     }
     updateBatchBar();
-    return;
-  }
-
-  // Per-item Mode changed (Video vs Audio)
-  if (target.classList.contains('item-mode-select')) {
-    const url = target.dataset.url;
-    const item = target.closest('.search-item');
-    const mode = target.value;
-    const qualitySel = item.querySelector('.item-quality-select');
-    const formatSel = item.querySelector('.item-format-select');
-
-    // Update available options for mode
-    const opts = FORMAT_OPTIONS[mode];
-    qualitySel.innerHTML = opts.quality.map(o => `<option value="${o.value}">${o.label}</option>`).join('');
-    formatSel.innerHTML = opts.format.map(o => `<option value="${o.value}">${o.label}</option>`).join('');
-
-    if (selectedVideos.has(url)) {
-      const entry = selectedVideos.get(url);
-      entry.mode = mode;
-      entry.quality = qualitySel.value;
-      entry.format = formatSel.value;
-    }
-    return;
-  }
-
-  // Per-item Quality or Format changed
-  if (target.classList.contains('item-quality-select') || target.classList.contains('item-format-select')) {
-    const url = target.dataset.url;
-    const item = target.closest('.search-item');
-    if (selectedVideos.has(url)) {
-      const entry = selectedVideos.get(url);
-      entry.quality = item.querySelector('.item-quality-select').value;
-      entry.format = item.querySelector('.item-format-select').value;
-    }
-    return;
   }
 }
 
 // ── Select All / Deselect All ────────────────────────────────────────
 function toggleSelectAll(e) {
   const checked = e.target.checked;
-  document.querySelectorAll('.search-checkbox').forEach((cb) => {
-    cb.checked = checked;
-    const item = cb.closest('.search-item');
-    const url = cb.dataset.url;
+  const allItems = document.querySelectorAll('.search-item');
+  const checkboxes = document.querySelectorAll('.search-checkbox');
+  checkboxes.forEach(cb => {
+    if (cb.checked !== checked) {
+      cb.checked = checked;
+      const item = cb.closest('.search-item');
+      const url = cb.dataset.url;
+      if (checked) {
+        const index = Array.from(allItems).indexOf(item);
+        const typeBtn = item.querySelector(`#item-type-dropdown-${index} .und-dropdown-button span`);
+        const qualityBtn = item.querySelector(`#item-quality-dropdown-${index} .und-dropdown-button span`);
+        const formatBtn = item.querySelector(`#item-format-dropdown-${index} .und-dropdown-button span`);
 
-    if (checked) {
-      const mode = item.querySelector('.item-mode-select').value;
-      const quality = item.querySelector('.item-quality-select').value;
-      const format = item.querySelector('.item-format-select').value;
+        const mode = typeBtn?.textContent.toLowerCase().includes('audio') ? 'audio' : 'video';
+        const qualityLabel = qualityBtn?.textContent.trim() || '';
+        const formatLabel = formatBtn?.textContent.trim() || '';
+        const opts = FORMAT_OPTIONS[mode];
+        const quality = (opts.quality.find(o => o.label === qualityLabel) || opts.quality[0]).value;
+        const format = (opts.format.find(o => o.label === formatLabel) || opts.format[0]).value;
 
-      selectedVideos.set(url, {
-        url,
-        title: item.dataset.title,
-        thumbnail: item.dataset.thumb,
-        channel: item.dataset.channel,
-        mode,
-        quality,
-        format,
-      });
-      item.classList.add('selected');
-    } else {
-      selectedVideos.delete(url);
-      item.classList.remove('selected');
+        selectedVideos.set(url, {
+          url,
+          title: item.dataset.title,
+          thumbnail: item.dataset.thumb,
+          channel: item.dataset.channel,
+          mode,
+          quality,
+          format,
+        });
+        item.classList.add('selected');
+      } else {
+        selectedVideos.delete(url);
+        item.classList.remove('selected');
+      }
     }
   });
   updateBatchBar();
@@ -350,7 +368,8 @@ function toggleSelectAll(e) {
 // ── Update Batch Action Bar ──────────────────────────────────────────
 function updateBatchBar() {
   const count = selectedVideos.size;
-  document.getElementById('batchCount').textContent = `${count} selected`;
+  const countEl = document.getElementById('batchCount');
+  if (countEl) countEl.textContent = `${count} selected`;
   const btn = document.getElementById('batchDownloadBtn');
   btn.disabled = count === 0;
 
@@ -424,23 +443,34 @@ function setMode(mode) {
   populateSelects();
 }
 
+let selectedQuality = 'best';
+let selectedFormat = 'mp4';
+
 function populateSelects() {
   const opts = FORMAT_OPTIONS[currentMode];
-  document.getElementById('qualitySelect').innerHTML = opts.quality
-    .map(o => `<option value="${o.value}">${o.label}</option>`).join('');
-  document.getElementById('formatSelect').innerHTML = opts.format
-    .map(o => `<option value="${o.value}">${o.label}</option>`).join('');
+  if (!opts.quality.some(o => o.value === selectedQuality)) selectedQuality = opts.quality[0].value;
+  if (!opts.format.some(o => o.value === selectedFormat)) selectedFormat = opts.format[0].value;
+
+  renderUndDropdown('qualityCustomDropdown', opts.quality, selectedQuality, (val) => {
+    selectedQuality = val;
+  });
+  renderUndDropdown('formatCustomDropdown', opts.format, selectedFormat, (val) => {
+    selectedFormat = val;
+  });
 }
 
 // ── Start Single Download ────────────────────────────────────────────
 async function startDownload() {
-  if (!currentVideoUrl) { showToast('Fetch video info first', 'error'); return; }
-
-  const quality = document.getElementById('qualitySelect').value;
-  const format = document.getElementById('formatSelect').value;
+  if (!currentVideoUrl) return;
   const btn = document.getElementById('downloadBtn');
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span> Starting...';
+  hide('errorSection');
+  hide('cancelledSection');
+
+  const mode = currentMode;
+  const quality = selectedQuality;
+  const format = selectedFormat;
 
   try {
     const res = await fetch(`${API}/api/download`, {
@@ -745,3 +775,84 @@ function timeAgo(ts) {
 }
 function escapeHtml(s) { if (!s) return ''; const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 function escapeAttr(s) { if (!s) return ''; return s.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// ── Universal Dropdown (und-dropdown) Component ──────────────────────
+function renderUndDropdown(containerId, options, currentValue, onChange) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+
+  const currentOpt = options.find(o => o.value === currentValue) || options[0];
+  const currentLabel = currentOpt ? currentOpt.label : currentValue;
+
+  container.innerHTML = `
+    <div class="und-dropdown-wrapper">
+      <button class="und-dropdown-button neo-select" type="button" aria-haspopup="listbox" aria-expanded="false">
+        <span>${escapeHtml(currentLabel)}</span>
+      </button>
+      <div class="und-dropdown-menu" role="listbox">
+        ${options.map(opt => `
+          <div class="und-dropdown-item ${opt.value === currentValue ? 'selected' : ''}" 
+               data-value="${opt.value}" role="option" aria-selected="${opt.value === currentValue ? 'true' : 'false'}">
+            ${escapeHtml(opt.label)}
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+
+  const btn = container.querySelector('.und-dropdown-button');
+  const menu = container.querySelector('.und-dropdown-menu');
+
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const isExpanded = btn.getAttribute('aria-expanded') === 'true';
+    
+    // Close other dropdowns
+    document.querySelectorAll('.und-dropdown-menu.show').forEach(m => {
+      if (m !== menu) {
+        m.classList.remove('show');
+        const otherBtn = m.previousElementSibling;
+        if (otherBtn) otherBtn.setAttribute('aria-expanded', 'false');
+      }
+    });
+
+    if (isExpanded) {
+      menu.classList.remove('show');
+      btn.setAttribute('aria-expanded', 'false');
+    } else {
+      menu.classList.add('show');
+      btn.setAttribute('aria-expanded', 'true');
+    }
+  });
+
+  menu.querySelectorAll('.und-dropdown-item').forEach(item => {
+    item.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const val = item.getAttribute('data-value');
+      
+      // Update visual selection text
+      const btnSpan = btn.querySelector('span');
+      if (btnSpan) btnSpan.textContent = item.textContent.trim();
+      
+      // Update active selection classes/attributes
+      menu.querySelectorAll('.und-dropdown-item').forEach(i => {
+        const isSelected = i === item;
+        i.classList.toggle('selected', isSelected);
+        i.setAttribute('aria-selected', isSelected ? 'true' : 'false');
+      });
+
+      menu.classList.remove('show');
+      btn.setAttribute('aria-expanded', 'false');
+      if (onChange) onChange(val);
+    });
+  });
+}
+
+// Global click handler to close dropdowns when clicking outside
+document.addEventListener('click', () => {
+  document.querySelectorAll('.und-dropdown-menu.show').forEach(menu => {
+    menu.classList.remove('show');
+    const btn = menu.previousElementSibling;
+    if (btn) btn.setAttribute('aria-expanded', 'false');
+  });
+});
