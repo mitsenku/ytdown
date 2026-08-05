@@ -38,6 +38,13 @@ DOWNLOAD_DIR = os.path.normpath(os.path.join(BASE_DIR, "..", "downloads"))
 FRONTEND_DIR = os.path.normpath(os.path.join(BASE_DIR, "..", "frontend"))
 
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
+try:
+    for f in os.listdir(DOWNLOAD_DIR):
+        path = os.path.join(DOWNLOAD_DIR, f)
+        if os.path.isfile(path):
+            delete_file(path)
+except Exception:
+    pass
 
 app = Flask(__name__, static_folder=FRONTEND_DIR, static_url_path="")
 app.config["MAX_CONTENT_LENGTH"] = 1 * 1024 * 1024  # 1 MB max request body
@@ -57,6 +64,35 @@ TASK_ID_PATTERN = re.compile(r"^[a-f0-9]{8}$")
 progress_store: dict = {}
 cancel_flags: dict = {}
 download_history: deque = deque(maxlen=20)
+
+def start_cleanup_thread():
+    def cleanup_loop():
+        while True:
+            try:
+                now = time.time()
+                if os.path.exists(DOWNLOAD_DIR):
+                    for f in os.listdir(DOWNLOAD_DIR):
+                        path = os.path.normpath(os.path.join(DOWNLOAD_DIR, f))
+                        if os.path.isfile(path):
+                            # Clean up files older than 30 minutes
+                            if now - os.path.getmtime(path) > 30 * 60:
+                                delete_file(path)
+                                match = re.match(r"^([a-f0-9]{8})_", f)
+                                if match:
+                                    task_id = match.group(1)
+                                    progress_store.pop(task_id, None)
+                                    for item in list(download_history):
+                                        if item.get("task_id") == task_id:
+                                            try:
+                                                download_history.remove(item)
+                                            except ValueError:
+                                                pass
+                                            break
+            except Exception:
+                pass
+            time.sleep(60)
+
+    threading.Thread(target=cleanup_loop, daemon=True).start()
 
 # ── Rate Limiting ─────────────────────────────────────────────────────
 # Simple in-memory per-IP rate limiter (no extra dependency)
@@ -358,19 +394,6 @@ def api_file(task_id):
     if not os.path.isfile(real_filepath):
         return jsonify({"error": "File not found on disk"}), 404
 
-    @after_this_request
-    def cleanup(response):
-        def _delayed_delete():
-            time.sleep(5)
-            delete_file(real_filepath)
-            progress_store.pop(task_id, None)
-            for item in list(download_history):
-                if item.get("task_id") == task_id:
-                    download_history.remove(item)
-                    break
-        threading.Thread(target=_delayed_delete, daemon=True).start()
-        return response
-
     return send_file(
         real_filepath,
         as_attachment=True,
@@ -402,5 +425,6 @@ def server_error(e):
 
 # ── Run ───────────────────────────────────────────────────────────────
 if __name__ == "__main__":
+    start_cleanup_thread()
     print("\n  [*] YT-DLP Web Interface running at http://localhost:5000\n")
-    app.run(host="127.0.0.1", port=5000, debug=False, threaded=True)
+    app.run(host="0.0.0.0", port=5000, debug=False, threaded=True)

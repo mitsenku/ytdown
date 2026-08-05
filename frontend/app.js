@@ -17,6 +17,7 @@ let currentMode = 'video';
 let currentTaskId = null;
 let currentVideoUrl = '';
 let eventSource = null;
+let batchQuality = '1080';
 
 // Map: url -> { url, title, thumbnail, channel, mode, quality, format }
 const selectedVideos = new Map();
@@ -25,7 +26,7 @@ const selectedVideos = new Map();
 const FORMAT_OPTIONS = {
   video: {
     quality: [
-      { value: 'best',  label: '🏆 Best Available' },
+      { value: 'best',  label: 'Best Available' },
       { value: '1080',  label: '1080p (Full HD)' },
       { value: '720',   label: '720p (HD)' },
       { value: '480',   label: '480p (SD)' },
@@ -39,7 +40,7 @@ const FORMAT_OPTIONS = {
   },
   audio: {
     quality: [
-      { value: 'best', label: '🏆 Best Available' },
+      { value: 'best', label: 'Best Available' },
       { value: '320',  label: '320 kbps' },
       { value: '256',  label: '256 kbps' },
       { value: '192',  label: '192 kbps' },
@@ -116,10 +117,10 @@ function setTheme(theme) {
   const text = document.getElementById('themeToggleText');
   if (icon && text) {
     if (theme === 'light') {
-      icon.textContent = '☀️';
+      icon.innerHTML = `<svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>`;
       text.textContent = 'Light';
     } else {
-      icon.textContent = '🌙';
+      icon.innerHTML = `<svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>`;
       text.textContent = 'Dark';
     }
   }
@@ -168,7 +169,10 @@ async function searchVideos(query) {
     showToast(err.message, 'error');
   } finally {
     btn.disabled = false;
-    btnText.innerHTML = '🔍 Go';
+    btnText.innerHTML = `
+      <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+      <span>Go</span>
+    `;
   }
 }
 
@@ -376,6 +380,69 @@ function updateBatchBar() {
   const bar = document.getElementById('batchBar');
   if (count > 0) {
     bar.classList.add('show');
+    
+    const BATCH_QUALITY_OPTIONS = [
+      { value: '1080', label: '1080p (Full HD)' },
+      { value: '720', label: '720p (HD)' },
+      { value: '480', label: '480p (SD)' },
+      { value: '360', label: '360p (Low)' },
+      { value: 'audio', label: 'Audio only' },
+    ];
+    
+    renderUndDropdown('batchQualityDropdown', BATCH_QUALITY_OPTIONS, batchQuality, (val) => {
+      batchQuality = val;
+      
+      // Update selectedVideos map values
+      selectedVideos.forEach((info) => {
+        if (val === 'audio') {
+          info.mode = 'audio';
+          info.quality = 'best';
+          info.format = 'mp3';
+        } else {
+          info.mode = 'video';
+          info.quality = val;
+          info.format = 'mp4';
+        }
+      });
+      
+      // Synchronize visual displays of quality/type dropdowns inside each selected item card
+      document.querySelectorAll('.search-item').forEach((item) => {
+        const checkbox = item.querySelector('.search-checkbox');
+        if (checkbox && checkbox.checked) {
+          const url = checkbox.dataset.url;
+          const info = selectedVideos.get(url);
+          if (info) {
+            const index = Array.from(document.querySelectorAll('.search-item')).indexOf(item);
+            const typeBtnSpan = item.querySelector(`#item-type-dropdown-${index} .und-dropdown-button span`);
+            const qualityBtnSpan = item.querySelector(`#item-quality-dropdown-${index} .und-dropdown-button span`);
+            const formatBtnSpan = item.querySelector(`#item-format-dropdown-${index} .und-dropdown-button span`);
+            
+            if (typeBtnSpan) typeBtnSpan.textContent = info.mode === 'audio' ? 'Audio' : 'Video';
+            if (qualityBtnSpan) {
+              const labelMap = {
+                best: 'Best Available',
+                '1080': '1080p (Full HD)',
+                '720': '720p (HD)',
+                '480': '480p (SD)',
+                '360': '360p (Low)',
+              };
+              qualityBtnSpan.textContent = labelMap[info.quality] || info.quality;
+            }
+            if (formatBtnSpan) formatBtnSpan.textContent = info.format.toUpperCase();
+            
+            // Also highlight active classes inside menu options
+            item.querySelectorAll('.und-dropdown-menu').forEach((menu) => {
+              menu.querySelectorAll('.und-dropdown-item').forEach((opt) => {
+                const optVal = opt.dataset.value;
+                const isSelected = (optVal === info.mode || optVal === info.quality || optVal === info.format);
+                opt.classList.toggle('selected', isSelected);
+                opt.setAttribute('aria-selected', isSelected ? 'true' : 'false');
+              });
+            });
+          }
+        }
+      });
+    });
   } else {
     bar.classList.remove('show');
   }
@@ -421,7 +488,10 @@ async function fetchInfo(url) {
     showToast(err.message, 'error');
   } finally {
     btn.disabled = false;
-    btnText.innerHTML = '🔍 Go';
+    btnText.innerHTML = `
+      <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+      <span>Go</span>
+    `;
   }
 }
 
@@ -494,7 +564,7 @@ async function startDownload() {
     showToast(err.message, 'error');
   } finally {
     btn.disabled = false;
-    btn.innerHTML = '⬇️ Download';
+    btn.innerHTML = '<svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg><span>Download</span>';
   }
 }
 
@@ -606,9 +676,8 @@ async function cancelDownload() {
   try {
     await fetch(`${API}/api/cancel/${currentTaskId}`, { method: 'POST' });
   } catch (err) {
-    showToast('Failed to cancel download', 'error');
     btn.disabled = false;
-    btn.innerHTML = '✕ Cancel Download';
+    btn.innerHTML = '<svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg><span>Cancel Download</span>';
   }
 }
 
@@ -694,19 +763,34 @@ async function loadHistory() {
     const history = await res.json();
     const list = document.getElementById('historyList');
     if (!history.length) {
-      list.innerHTML = `<li class="history-empty"><div class="history-empty__icon">📭</div><div>No downloads yet</div></li>`;
+      list.innerHTML = `
+        <li class="history-empty">
+          <div class="history-empty__icon">
+            <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 32px; height: 32px;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+          </div>
+          <div>No downloads yet</div>
+        </li>
+      `;
       return;
     }
     list.innerHTML = history.map(item => `
       <li class="history-item">
         <div class="history-item__info">
-          <div class="history-item__icon">${item.mode === 'audio' ? '🎵' : '🎬'}</div>
+          <div class="history-item__icon">
+            ${item.mode === 'audio' 
+              ? `<svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg>` 
+              : `<svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg>`
+            }
+          </div>
           <div class="history-item__text">
             <div class="history-item__title">${escapeHtml(item.title)}</div>
             <div class="history-item__meta">${item.format.toUpperCase()} · ${timeAgo(item.timestamp)}</div>
           </div>
         </div>
-        <button class="btn btn--secondary history-item__btn" data-task-id="${item.task_id}">💾 Save</button>
+        <button class="btn btn--secondary history-item__btn" data-task-id="${item.task_id}" style="display: inline-flex; align-items: center; gap: 6px; justify-content: center;">
+          <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+          <span>Save</span>
+        </button>
       </li>
     `).join('');
   } catch (err) { /* silent */ }
@@ -725,8 +809,12 @@ function showToast(message, type = 'info') {
   const container = document.getElementById('toastContainer');
   const toast = document.createElement('div');
   toast.className = `toast toast--${type}`;
-  const icons = { error: '❌', success: '✅', info: 'ℹ️' };
-  toast.innerHTML = `<span>${icons[type] || 'ℹ️'}</span> <span>${escapeHtml(message)}</span>`;
+  const icons = {
+    error: `<svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>`,
+    success: `<svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`,
+    info: `<svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>`
+  };
+  toast.innerHTML = `<span style="display: inline-flex; align-items: center;">${icons[type] || icons.info}</span> <span style="margin-left: 6px;">${escapeHtml(message)}</span>`;
   container.appendChild(toast);
   setTimeout(() => {
     toast.classList.add('removing');
