@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Download YouTube videos and music in any format using yt-dlp.">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; font-src 'self' https://fonts.gstatic.com; img-src 'self' https://*.ytimg.com https://*.ggpht.com https://i.ytimg.com data:; connect-src 'self'; frame-ancestors 'none'; form-action 'self'; base-uri 'self';">
+  <title>YT-DLP Downloader</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎬</text></svg>">
+</head>
+<body>
+
+  <div class="toast-container" id="toastContainer"></div>
+
+  <main class="app-container">
+
+    <!-- Header with Theme Toggle -->
+    <header class="header">
+      <div class="header__top">
+        <div class="header__logo">
+          <div class="header__icon">🎬</div>
+          <h1 class="header__title">YT-DLP Web</h1>
+        </div>
+        <button id="themeToggleBtn" class="btn btn--secondary theme-toggle-btn" aria-label="Toggle theme">
+          <span id="themeToggleIcon">🌙</span> <span id="themeToggleText">Dark</span>
+        </button>
+      </div>
+      <p class="header__subtitle">Search, preview &amp; download YouTube videos &amp; music</p>
+    </header>
+
+    <!-- URL / Search Input -->
+    <section class="neo-card" id="urlCard">
+      <div class="neo-card__header">
+        <div class="neo-card__icon">🔗</div>
+        <h2 class="neo-card__title">Paste URL or Search</h2>
+      </div>
+      <div class="url-input-group">
+        <input type="text" id="urlInput" class="neo-input"
+          placeholder="Paste YouTube URL or type a search query..."
+          autocomplete="off" spellcheck="false">
+        <button id="fetchBtn" class="btn btn--primary">
+          <span id="fetchBtnText">🔍 Go</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- Search Results with multi-select -->
+    <section class="neo-card search-results-section" id="searchResults">
+      <div class="neo-card__header">
+        <div class="neo-card__icon">📋</div>
+        <h2 class="neo-card__title">Search Results</h2>
+        <span class="search-count" id="searchCount"></span>
+      </div>
+      <!-- Batch action bar -->
+      <div class="batch-bar" id="batchBar">
+        <label class="neo-checkbox batch-bar__selectall">
+          <input type="checkbox" id="selectAllCheckbox">
+          <span class="neo-checkbox__mark"></span>
+          <span>Select All</span>
+        </label>
+        <span class="batch-bar__count" id="batchCount">0 selected</span>
+        <button id="batchDownloadBtn" class="btn btn--success btn--sm" disabled>
+          ⬇️ Download Selected
+        </button>
+      </div>
+      <ul class="search-list" id="searchList"></ul>
+    </section>
+
+    <!-- Video Preview (single video) -->
+    <section class="neo-card video-preview" id="videoPreview">
+      <div class="neo-card__header">
+        <div class="neo-card__icon">🎥</div>
+        <h2 class="neo-card__title">Video Info</h2>
+      </div>
+      <div class="video-info">
+        <div class="video-thumb">
+          <img id="videoThumb" src="" alt="Video thumbnail">
+        </div>
+        <div class="video-meta">
+          <div class="video-meta__title" id="videoTitle"></div>
+          <div class="video-meta__channel" id="videoChannel"></div>
+          <div class="video-meta__stats">
+            <span class="video-meta__stat">⏱️ <span id="durationText">—</span></span>
+            <span class="video-meta__stat">👁️ <span id="viewsText">—</span></span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Format Selection -->
+    <section class="neo-card format-section" id="formatSection">
+      <div class="neo-card__header">
+        <div class="neo-card__icon">⚙️</div>
+        <h2 class="neo-card__title">Download Options</h2>
+      </div>
+      <div class="mode-toggle" id="modeToggle">
+        <button class="mode-toggle__btn active" data-mode="video" id="modeVideo">🎬 Video</button>
+        <button class="mode-toggle__btn" data-mode="audio" id="modeAudio">🎵 Audio Only</button>
+      </div>
+      <div class="format-grid">
+        <div class="format-group">
+          <label for="qualitySelect">Quality</label>
+          <select id="qualitySelect" class="neo-select"></select>
+        </div>
+        <div class="format-group">
+          <label for="formatSelect">Format</label>
+          <select id="formatSelect" class="neo-select"></select>
+        </div>
+      </div>
+      <button id="downloadBtn" class="btn btn--success btn--full">⬇️ Download</button>
+    </section>
+
+    <!-- Progress -->
+    <section class="neo-card progress-section" id="progressSection">
+      <div class="neo-card__header">
+        <div class="neo-card__icon">📥</div>
+        <h2 class="neo-card__title" id="progressTitle">Downloading...</h2>
+      </div>
+      <div class="progress-bar-container">
+        <div class="progress-bar" id="progressBar"></div>
+      </div>
+      <div class="progress-info">
+        <span class="progress-percent" id="progressPercent">0%</span>
+        <div class="progress-details">
+          <span class="progress-detail">⚡ <span id="speedText">—</span></span>
+          <span class="progress-detail">⏳ <span id="etaText">—</span></span>
+        </div>
+      </div>
+      <div class="progress-status" id="progressStatus">Starting download...</div>
+      <div style="margin-top: 18px; text-align: center;">
+        <button id="cancelBtn" class="btn btn--danger">✕ Cancel Download</button>
+      </div>
+    </section>
+
+    <!-- Batch Progress -->
+    <section class="neo-card batch-progress-section" id="batchProgressSection">
+      <div class="neo-card__header">
+        <div class="neo-card__icon">📥</div>
+        <h2 class="neo-card__title">Batch Download</h2>
+      </div>
+      <div class="batch-queue" id="batchQueue"></div>
+    </section>
+
+    <!-- Download Complete -->
+    <section class="neo-card download-complete" id="completeSection">
+      <div class="complete-icon">✓</div>
+      <div class="complete-title">Download Complete!</div>
+      <div class="complete-filename" id="completeFilename">—</div>
+      <div style="display: flex; gap: 12px; justify-content: center;">
+        <button id="saveFileBtn" class="btn btn--success">💾 Save File</button>
+        <button id="newDownloadBtn" class="btn btn--secondary">🔄 New Download</button>
+      </div>
+    </section>
+
+    <!-- Error -->
+    <section class="neo-card error-section" id="errorSection">
+      <div class="error-box">
+        <span class="error-box__icon">⚠️</span>
+        <div class="error-box__message" id="errorMessage">—</div>
+      </div>
+      <div style="margin-top: 18px; text-align: center;">
+        <button id="tryAgainBtn" class="btn btn--secondary">🔄 Try Again</button>
+      </div>
+    </section>
+
+    <!-- Cancelled -->
+    <section class="neo-card cancelled-section" id="cancelledSection">
+      <div class="cancelled-icon">✕</div>
+      <div class="cancelled-title">Download Cancelled</div>
+      <div class="cancelled-subtitle">The download was stopped. No files were saved.</div>
+      <div style="margin-top: 14px; text-align: center;">
+        <button id="startOverBtn" class="btn btn--primary">🔄 Start Over</button>
+      </div>
+    </section>
+
+    <!-- History -->
+    <section class="neo-card history-section" id="historySection">
+      <div class="neo-card__header">
+        <div class="neo-card__icon">📋</div>
+        <h2 class="neo-card__title">Recent Downloads</h2>
+      </div>
+      <ul class="history-list" id="historyList">
+        <li class="history-empty">
+          <div class="history-empty__icon">📭</div>
+          <div>No downloads yet</div>
+        </li>
+      </ul>
+    </section>
+
+    <footer class="footer">
+      Powered by <a href="https://github.com/yt-dlp/yt-dlp" target="_blank" rel="noopener">yt-dlp</a>
+      &nbsp;·&nbsp; Local-only &nbsp;·&nbsp; No data collected
+    </footer>
+
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
