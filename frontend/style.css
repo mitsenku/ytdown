@@ -298,7 +298,7 @@ body {
   background: var(--btn-secondary-bg-hover);
 }
 
-.btn--full { width: 100%; }
+.btn--full { width: 320px; max-width: 100%; margin: 0 auto; display: flex; justify-content: center; }
 .btn--sm { padding: 8px 16px; font-size: 0.8rem; border-radius: var(--radius-small); }
 
 .spinner {
@@ -351,7 +351,7 @@ body {
 /* ── Selection & Batch Bar ────────────────────────────────────────── */
 .batch-bar {
   display: flex; align-items: center; gap: 18px;
-  padding: 12px 20px; margin-bottom: 18px;
+  padding: 18px 24px; margin-bottom: 18px;
   background: var(--surface-secondary);
   border: 1px solid var(--glass-border); border-radius: var(--radius-medium);
   box-shadow: var(--neo-inset);
@@ -361,14 +361,13 @@ body {
 }
 .batch-bar.show {
   opacity: 1; transform: translateY(0); pointer-events: auto;
-  height: auto; padding-top: 12px; padding-bottom: 12px; margin-bottom: 18px;
+  height: auto; padding-top: 18px; padding-bottom: 18px; margin-bottom: 18px;
 }
 .batch-bar__count {
   font-size: 0.88rem; font-weight: 700; color: var(--primary);
   font-family: 'JetBrains Mono', monospace;
 }
 .batch-bar__selectall { flex-shrink: 0; }
-#batchQualityDropdown { width: 180px; flex-shrink: 0; }
 #batchDownloadBtn { margin-left: auto; }
 
 /* ── Search Results & Items ───────────────────────────────────────── */
@@ -381,7 +380,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding: 16px;
+  padding: 28px;
   border-radius: var(--radius-large);
   background: var(--bg-card);
   border: 1px solid var(--glass-border);
@@ -400,6 +399,7 @@ body {
   background: rgba(255, 255, 255, 0.98);
   box-shadow: 0 12px 30px rgba(0, 0, 0, 0.06);
   border: 1px solid rgba(255, 90, 20, 0.35);
+  transform: scale(1.01);
   position: relative !important;
   z-index: 99 !important;
 }
@@ -418,8 +418,9 @@ body {
 
 .search-item__options {
   display: none;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 24px;
+  align-items: start;
   padding-top: 12px;
   border-top: 1px solid var(--glass-border);
   animation: slideUp 200ms cubic-bezier(0.4, 0, 0.2, 1);
@@ -428,6 +429,19 @@ body {
   display: grid;
 }
 
+.item-opt-group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.search-item__checkbox {
+  align-self: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
 .search-checkbox {
   align-self: center;
   flex-shrink: 0;
@@ -440,6 +454,7 @@ body {
   background: var(--surface-secondary);
   position: relative;
   flex-shrink: 0;
+  align-self: flex-start;
 }
 .search-item__thumb img { width: 100%; height: 100%; object-fit: cover; }
 .search-item__duration {
@@ -448,12 +463,12 @@ body {
   font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; font-weight: 600;
   padding: 2px 6px; border-radius: 4px;
 }
-.search-item__info { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 3px; }
+.search-item__info { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 3px; max-width: 650px; }
 .search-item__title {
   font-size: 0.92rem; font-weight: 700; color: var(--text-primary);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.search-item__channel { font-size: 0.78rem; color: var(--primary); font-weight: 600; }
+.search-item__channel { font-size: 0.78rem; color: var(--primary); font-weight: 600; margin-top: 6px; }
 .search-item__views { font-size: 0.75rem; color: var(--text-secondary); font-weight: 500; }
 .search-item__actions { flex-shrink: 0; align-self: center; }
 .search-select-btn {
@@ -476,6 +491,7 @@ body {
 }
 .und-dropdown-button {
   width: 100%;
+  min-height: 56px;
   text-align: left;
   display: flex;
   align-items: center;
@@ -553,7 +569,7 @@ body {
   background: var(--surface-secondary);
 }
 .video-thumb img { width: 100%; height: 100%; object-fit: cover; }
-.video-meta { min-width: 0; flex: 1; }
+.video-meta { min-width: 0; flex: 1; margin-top: 12px; }
 .video-meta__title { font-size: 1.05rem; font-weight: 700; margin-bottom: 6px; line-height: 1.4; color: var(--text-primary); }
 .video-meta__channel { font-size: 0.85rem; color: var(--primary); font-weight: 600; margin-bottom: 12px; }
 .video-meta__stats { display: flex; gap: 16px; }
@@ -762,6 +778,69 @@ body {
   to { opacity: 1; transform: translateY(0); }
 }
 
+/* ── Dual Range Slider ────────────────────────────────────────────── */
+.range-slider {
+  position: relative;
+  width: 100%;
+  height: 8px;
+  background: var(--surface-secondary);
+  border-radius: 99px;
+  box-shadow: var(--neo-inset);
+}
+.range-slider__track {
+  position: absolute;
+  height: 100%;
+  background: var(--primary);
+  border-radius: 99px;
+}
+.range-slider input[type="range"] {
+  position: absolute;
+  width: 100%;
+  height: 0;
+  -webkit-appearance: none;
+  appearance: none;
+  background: none;
+  pointer-events: none;
+  margin: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  outline: none;
+}
+.range-slider input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--bg-card);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--neo-raised-sm);
+  cursor: pointer;
+  pointer-events: auto;
+  transition: transform 150ms ease;
+  z-index: 2;
+  position: relative;
+}
+.range-slider input[type="range"]::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+}
+.range-slider input[type="range"]::-moz-range-thumb {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--bg-card);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--neo-raised-sm);
+  cursor: pointer;
+  pointer-events: auto;
+  transition: transform 150ms ease;
+  z-index: 2;
+  position: relative;
+}
+.range-slider input[type="range"]::-moz-range-thumb:hover {
+  transform: scale(1.15);
+}
+
 @media (max-width: 640px) {
   .app-container { padding: 16px 14px 36px; gap: 16px; }
   .header__title { font-size: 1.5rem; }
@@ -810,7 +889,6 @@ body {
   }
   .search-item__options { grid-template-columns: 1fr; }
   .batch-bar { flex-direction: column; align-items: stretch; gap: 12px; }
-  #batchQualityDropdown { width: 100%; }
   #batchDownloadBtn { margin-left: 0; width: 100%; }
   .toast-container { top: 12px; right: 12px; left: 12px; }
   .toast { max-width: 100%; }

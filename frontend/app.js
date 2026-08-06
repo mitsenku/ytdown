@@ -85,10 +85,35 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('selectAllCheckbox').addEventListener('change', toggleSelectAll);
   document.getElementById('batchDownloadBtn').addEventListener('click', executeBatchDownload);
 
+  // Duration clipping checkbox toggle
+  document.getElementById('enableCutCheckbox').addEventListener('change', (e) => {
+    document.getElementById('cutInputsContainer').style.display = e.target.checked ? 'flex' : 'none';
+  });
+
   // Event delegation for search results (checkboxes, select buttons, per-item options)
   const searchList = document.getElementById('searchList');
   searchList.addEventListener('click', handleSearchListClick);
   searchList.addEventListener('change', handleSearchListChange);
+
+  // Sync clipping range sliders
+  const startSlider = document.getElementById('cutStartSlider');
+  const endSlider = document.getElementById('cutEndSlider');
+  if (startSlider && endSlider) {
+    startSlider.addEventListener('input', handleStartSliderInput);
+    endSlider.addEventListener('input', handleEndSliderInput);
+    startSlider.addEventListener('mousedown', () => { startSlider.style.zIndex = '10'; endSlider.style.zIndex = '9'; });
+    startSlider.addEventListener('touchstart', () => { startSlider.style.zIndex = '10'; endSlider.style.zIndex = '9'; });
+    endSlider.addEventListener('mousedown', () => { endSlider.style.zIndex = '10'; startSlider.style.zIndex = '9'; });
+    endSlider.addEventListener('touchstart', () => { endSlider.style.zIndex = '10'; startSlider.style.zIndex = '9'; });
+  }
+
+  // Sync manual input changes back to range sliders
+  const startInput = document.getElementById('cutStartInput');
+  const endInput = document.getElementById('cutEndInput');
+  if (startInput && endInput) {
+    startInput.addEventListener('change', handleTimeInputChange);
+    endInput.addEventListener('change', handleTimeInputChange);
+  }
 
   // Event delegation for history save buttons
   document.getElementById('historyList').addEventListener('click', handleHistoryClick);
@@ -288,6 +313,20 @@ function handleSearchListClick(e) {
     selectSearchResult(url);
     return;
   }
+
+  // Prevent double toggling or blocking select dropdown interactions
+  if (e.target.closest('.und-dropdown') || e.target.closest('.neo-checkbox')) {
+    return;
+  }
+
+  const item = e.target.closest('.search-item');
+  if (item) {
+    const cb = item.querySelector('.search-checkbox');
+    if (cb) {
+      cb.checked = !cb.checked;
+      cb.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+  }
 }
 
 // ── Event Delegation: Search List Checkbox & Select Changes ──────────
@@ -380,69 +419,6 @@ function updateBatchBar() {
   const bar = document.getElementById('batchBar');
   if (count > 0) {
     bar.classList.add('show');
-    
-    const BATCH_QUALITY_OPTIONS = [
-      { value: '1080', label: '1080p (Full HD)' },
-      { value: '720', label: '720p (HD)' },
-      { value: '480', label: '480p (SD)' },
-      { value: '360', label: '360p (Low)' },
-      { value: 'audio', label: 'Audio only' },
-    ];
-    
-    renderUndDropdown('batchQualityDropdown', BATCH_QUALITY_OPTIONS, batchQuality, (val) => {
-      batchQuality = val;
-      
-      // Update selectedVideos map values
-      selectedVideos.forEach((info) => {
-        if (val === 'audio') {
-          info.mode = 'audio';
-          info.quality = 'best';
-          info.format = 'mp3';
-        } else {
-          info.mode = 'video';
-          info.quality = val;
-          info.format = 'mp4';
-        }
-      });
-      
-      // Synchronize visual displays of quality/type dropdowns inside each selected item card
-      document.querySelectorAll('.search-item').forEach((item) => {
-        const checkbox = item.querySelector('.search-checkbox');
-        if (checkbox && checkbox.checked) {
-          const url = checkbox.dataset.url;
-          const info = selectedVideos.get(url);
-          if (info) {
-            const index = Array.from(document.querySelectorAll('.search-item')).indexOf(item);
-            const typeBtnSpan = item.querySelector(`#item-type-dropdown-${index} .und-dropdown-button span`);
-            const qualityBtnSpan = item.querySelector(`#item-quality-dropdown-${index} .und-dropdown-button span`);
-            const formatBtnSpan = item.querySelector(`#item-format-dropdown-${index} .und-dropdown-button span`);
-            
-            if (typeBtnSpan) typeBtnSpan.textContent = info.mode === 'audio' ? 'Audio' : 'Video';
-            if (qualityBtnSpan) {
-              const labelMap = {
-                best: 'Best Available',
-                '1080': '1080p (Full HD)',
-                '720': '720p (HD)',
-                '480': '480p (SD)',
-                '360': '360p (Low)',
-              };
-              qualityBtnSpan.textContent = labelMap[info.quality] || info.quality;
-            }
-            if (formatBtnSpan) formatBtnSpan.textContent = info.format.toUpperCase();
-            
-            // Also highlight active classes inside menu options
-            item.querySelectorAll('.und-dropdown-menu').forEach((menu) => {
-              menu.querySelectorAll('.und-dropdown-item').forEach((opt) => {
-                const optVal = opt.dataset.value;
-                const isSelected = (optVal === info.mode || optVal === info.quality || optVal === info.format);
-                opt.classList.toggle('selected', isSelected);
-                opt.setAttribute('aria-selected', isSelected ? 'true' : 'false');
-              });
-            });
-          }
-        }
-      });
-    });
   } else {
     bar.classList.remove('show');
   }
@@ -497,11 +473,39 @@ async function fetchInfo(url) {
 
 // ── Render Video Preview ─────────────────────────────────────────────
 function renderVideoPreview(info) {
-  document.getElementById('videoThumb').src = info.thumbnail || '';
+  const embedUrl = getYouTubeEmbedUrl(currentVideoUrl);
+  const thumbContainer = document.querySelector('.video-thumb');
+  if (embedUrl && thumbContainer) {
+    thumbContainer.innerHTML = `<iframe id="videoPlayerFrame" src="${embedUrl}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen style="width: 100%; height: 100%; aspect-ratio: 16/9; border-radius: 18px;"></iframe>`;
+  } else if (thumbContainer) {
+    thumbContainer.innerHTML = `<img id="videoThumb" src="${info.thumbnail || ''}" alt="Video thumbnail" style="width: 100%; height: 100%; object-fit: cover;">`;
+  }
+
   document.getElementById('videoTitle').textContent = info.title || 'Unknown Title';
   document.getElementById('videoChannel').textContent = info.channel || 'Unknown Channel';
-  document.getElementById('durationText').textContent = formatDuration(info.duration);
+  const formattedDuration = formatDuration(info.duration);
+  document.getElementById('durationText').textContent = formattedDuration;
   document.getElementById('viewsText').textContent = formatViews(info.view_count);
+
+  // Pre-fill clipping inputs and set slider boundaries
+  const duration = info.duration || 0;
+  const startSlider = document.getElementById('cutStartSlider');
+  const endSlider = document.getElementById('cutEndSlider');
+
+  if (startSlider && endSlider) {
+    startSlider.min = 0;
+    startSlider.max = duration;
+    startSlider.value = 0;
+
+    endSlider.min = 0;
+    endSlider.max = duration;
+    endSlider.value = duration;
+  }
+
+  document.getElementById('enableCutCheckbox').checked = false;
+  document.getElementById('cutInputsContainer').style.display = 'none';
+
+  updateCutSliders();
 }
 
 // ── Mode Toggle ──────────────────────────────────────────────────────
@@ -542,11 +546,33 @@ async function startDownload() {
   const quality = selectedQuality;
   const format = selectedFormat;
 
+  let cutStart = null;
+  let cutEnd = null;
+  const enableCut = document.getElementById('enableCutCheckbox').checked;
+  if (enableCut) {
+    cutStart = document.getElementById('cutStartInput').value.trim();
+    cutEnd = document.getElementById('cutEndInput').value.trim();
+    const timeRegex = /^(?:(?:\d+:)?\d+:)?\d+(?:\.\d+)?$/;
+    if (!timeRegex.test(cutStart) || !timeRegex.test(cutEnd)) {
+      showToast('Invalid start or end time format. Use HH:MM:SS, MM:SS, or seconds.', 'error');
+      btn.disabled = false;
+      btn.innerHTML = '<svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg><span>Download</span>';
+      return;
+    }
+  }
+
   try {
     const res = await fetch(`${API}/api/download`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url: currentVideoUrl, mode: currentMode, quality, format }),
+      body: JSON.stringify({ 
+        url: currentVideoUrl, 
+        mode: currentMode, 
+        quality, 
+        format,
+        cut_start: cutStart,
+        cut_end: cutEnd
+      }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Failed to start download');
@@ -753,6 +779,14 @@ function resetUI() {
   if (eventSource) { eventSource.close(); eventSource = null; }
   document.getElementById('urlInput').value = '';
   document.getElementById('urlInput').focus();
+  document.getElementById('enableCutCheckbox').checked = false;
+  document.getElementById('cutInputsContainer').style.display = 'none';
+  document.getElementById('cutStartInput').value = '00:00:00';
+  document.getElementById('cutEndInput').value = '';
+  const thumbContainer = document.querySelector('.video-thumb');
+  if (thumbContainer) {
+    thumbContainer.innerHTML = `<img id="videoThumb" src="" alt="Video thumbnail">`;
+  }
   loadHistory();
 }
 
@@ -944,3 +978,104 @@ document.addEventListener('click', () => {
     if (btn) btn.setAttribute('aria-expanded', 'false');
   });
 });
+
+// ── Range Slider Handlers & Embed Helpers ──────────────────────────
+function getYouTubeEmbedUrl(url) {
+  const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+  const match = url.match(regExp);
+  if (match && match[2].length === 11) {
+    return `https://www.youtube.com/embed/${match[2]}`;
+  }
+  return null;
+}
+
+function formatSecondsToTime(seconds) {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = Math.floor(seconds % 60);
+  const ms = Math.round((seconds % 1) * 100);
+  let time = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  if (ms > 0) {
+    time += `.${String(ms).padStart(2, '0')}`;
+  }
+  return time;
+}
+
+function parseTimeToSeconds(timeStr) {
+  timeStr = timeStr.trim();
+  if (!timeStr) return 0;
+  if (/^\d+(\.\d+)?$/.test(timeStr)) {
+    return parseFloat(timeStr);
+  }
+  const parts = timeStr.split(':');
+  try {
+    if (parts.length === 2) {
+      return parseInt(parts[0], 10) * 60 + parseFloat(parts[1]);
+    } else if (parts.length === 3) {
+      return parseInt(parts[0], 10) * 3600 + parseInt(parts[1], 10) * 60 + parseFloat(parts[2]);
+    }
+  } catch(e) {}
+  return 0;
+}
+
+function handleStartSliderInput() {
+  const startSlider = document.getElementById('cutStartSlider');
+  const endSlider = document.getElementById('cutEndSlider');
+  if (parseFloat(startSlider.value) > parseFloat(endSlider.value)) {
+    startSlider.value = endSlider.value;
+  }
+  updateCutSliders();
+}
+
+function handleEndSliderInput() {
+  const startSlider = document.getElementById('cutStartSlider');
+  const endSlider = document.getElementById('cutEndSlider');
+  if (parseFloat(endSlider.value) < parseFloat(startSlider.value)) {
+    endSlider.value = startSlider.value;
+  }
+  updateCutSliders();
+}
+
+function handleTimeInputChange() {
+  const startVal = parseTimeToSeconds(document.getElementById('cutStartInput').value);
+  const endVal = parseTimeToSeconds(document.getElementById('cutEndInput').value);
+
+  const startSlider = document.getElementById('cutStartSlider');
+  const endSlider = document.getElementById('cutEndSlider');
+  const max = parseFloat(startSlider.max) || 100;
+
+  const startClamped = Math.max(0, Math.min(startVal, max));
+  const endClamped = Math.max(0, Math.min(endVal, max));
+
+  if (startClamped <= endClamped) {
+    startSlider.value = startClamped;
+    endSlider.value = endClamped;
+  } else {
+    startSlider.value = endClamped;
+    endSlider.value = startClamped;
+  }
+  updateCutSliders();
+}
+
+function updateCutSliders() {
+  const startSlider = document.getElementById('cutStartSlider');
+  const endSlider = document.getElementById('cutEndSlider');
+  const track = document.getElementById('cutSliderTrack');
+  const startInput = document.getElementById('cutStartInput');
+  const endInput = document.getElementById('cutEndInput');
+
+  if (!startSlider || !endSlider || !track || !startInput || !endInput) return;
+
+  let startVal = parseFloat(startSlider.value);
+  let endVal = parseFloat(endSlider.value);
+  const max = parseFloat(startSlider.max) || 100;
+
+  const leftPct = (startVal / max) * 100;
+  const widthPct = ((endVal - startVal) / max) * 100;
+
+  track.style.left = `${leftPct}%`;
+  track.style.width = `${widthPct}%`;
+
+  startInput.value = formatSecondsToTime(startVal);
+  endInput.value = formatSecondsToTime(endVal);
+}

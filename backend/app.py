@@ -243,6 +243,23 @@ def api_info():
 
 
 # ── API: Start download ──────────────────────────────────────────────
+def parse_time_to_seconds(time_str: str) -> float:
+    time_str = time_str.strip()
+    if not time_str:
+        return 0.0
+    if re.match(r"^\d+(\.\d+)?$", time_str):
+        return float(time_str)
+    parts = time_str.split(":")
+    try:
+        if len(parts) == 2:  # MM:SS
+            return int(parts[0]) * 60 + float(parts[1])
+        elif len(parts) == 3:  # HH:MM:SS
+            return int(parts[0]) * 3600 + int(parts[1]) * 60 + float(parts[2])
+        else:
+            raise ValueError()
+    except Exception:
+        raise ValueError("Invalid time format. Use HH:MM:SS, MM:SS, or seconds.")
+
 @app.route("/api/download", methods=["POST"])
 @rate_limited
 def api_download():
@@ -254,10 +271,27 @@ def api_download():
     mode = data.get("mode", "video")
     quality = data.get("quality", "best")
     file_format = data.get("format", "mp4")
+    cut_start_raw = data.get("cut_start")
+    cut_end_raw = data.get("cut_end")
 
     # Type checks
     if not all(isinstance(v, str) for v in [url, mode, quality, file_format]):
         return jsonify({"error": "Invalid parameter types"}), 400
+
+    cut_start = None
+    cut_end = None
+    if cut_start_raw is not None or cut_end_raw is not None:
+        if not isinstance(cut_start_raw, str) or not isinstance(cut_end_raw, str):
+            return jsonify({"error": "Invalid cut range parameters"}), 400
+        try:
+            cut_start = parse_time_to_seconds(cut_start_raw)
+            cut_end = parse_time_to_seconds(cut_end_raw)
+            if cut_start < 0 or cut_end < 0:
+                return jsonify({"error": "Times must be non-negative"}), 400
+            if cut_start >= cut_end:
+                return jsonify({"error": "Start time must be less than end time"}), 400
+        except ValueError as e:
+            return jsonify({"error": str(e)}), 400
 
     url = url.strip()
 
@@ -288,7 +322,7 @@ def api_download():
 
     thread = threading.Thread(
         target=_run_download,
-        args=(url, mode, quality, file_format, task_id),
+        args=(url, mode, quality, file_format, task_id, cut_start, cut_end),
         daemon=True,
     )
     thread.start()
@@ -296,7 +330,7 @@ def api_download():
     return jsonify({"task_id": task_id})
 
 
-def _run_download(url, mode, quality, file_format, task_id):
+def _run_download(url, mode, quality, file_format, task_id, cut_start=None, cut_end=None):
     """Background thread target for downloading."""
     start_download(
         url=url,
@@ -307,6 +341,8 @@ def _run_download(url, mode, quality, file_format, task_id):
         progress_store=progress_store,
         cancel_flags=cancel_flags,
         output_dir=DOWNLOAD_DIR,
+        cut_start=cut_start,
+        cut_end=cut_end,
     )
     result = progress_store.get(task_id, {})
     if result.get("status") == "done":

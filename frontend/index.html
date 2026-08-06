@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="Download YouTube videos and music in any format using yt-dlp.">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; font-src 'self' https://fonts.gstatic.com; img-src 'self' https://*.ytimg.com https://*.ggpht.com https://i.ytimg.com data:; connect-src 'self'; frame-ancestors 'none'; form-action 'self'; base-uri 'self';">
-  <title>YT-DLP Downloader</title>
+  <title>UND</title>
   <link rel="stylesheet" href="style.css">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎬</text></svg>">
 </head>
@@ -69,7 +69,6 @@
           <span>Select All</span>
         </label>
         <span class="batch-bar__count" id="batchCount">0 selected</span>
-        <div id="batchQualityDropdown" class="und-dropdown"></div>
         <button id="batchDownloadBtn" class="btn btn--success btn--sm" disabled style="display: inline-flex; align-items: center; gap: 6px;">
           <svg class="svg-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
           <span>Download Selected</span>
@@ -135,7 +134,36 @@
           <div id="formatCustomDropdown" class="und-dropdown"></div>
         </div>
       </div>
-      <button id="downloadBtn" class="btn btn--success btn--full" style="display: inline-flex; align-items: center; gap: 6px;">
+      <!-- Video Duration Section (Clipping) -->
+      <div class="duration-cut-section" id="durationCutSection" style="margin-top: 18px; margin-bottom: 22px; padding-top: 18px; border-top: 1px solid var(--glass-border);">
+        <label class="neo-checkbox" style="margin-bottom: 12px;">
+          <input type="checkbox" id="enableCutCheckbox">
+          <span class="neo-checkbox__mark"></span>
+          <span>Download specific part of the video (clip)</span>
+        </label>
+        <div class="duration-cut-inputs" id="cutInputsContainer" style="display: none; flex-direction: column; gap: 16px; margin-top: 14px;">
+          <!-- Dual Range Slider -->
+          <div class="range-slider-container" style="padding: 10px 4px 20px 4px; position: relative;">
+            <div class="range-slider">
+              <div class="range-slider__track" id="cutSliderTrack"></div>
+              <input type="range" id="cutStartSlider" min="0" max="100" value="0">
+              <input type="range" id="cutEndSlider" min="0" max="100" value="100">
+            </div>
+          </div>
+          <!-- Inputs Row -->
+          <div style="display: flex; align-items: center; gap: 24px; width: 100%;">
+            <div class="format-group" style="flex: 1;">
+              <label style="font-size: 0.82rem; font-weight: 700; color: var(--text-secondary); text-transform: uppercase;">Start Time (HH:MM:SS)</label>
+              <input type="text" id="cutStartInput" class="neo-input" placeholder="00:00:00" style="text-align: center; font-family: 'JetBrains Mono', monospace;" value="00:00:00">
+            </div>
+            <div class="format-group" style="flex: 1;">
+              <label style="font-size: 0.82rem; font-weight: 700; color: var(--text-secondary); text-transform: uppercase;">End Time (HH:MM:SS)</label>
+              <input type="text" id="cutEndInput" class="neo-input" placeholder="00:00:00" style="text-align: center; font-family: 'JetBrains Mono', monospace;">
+            </div>
+          </div>
+        </div>
+      </div>
+      <button id="downloadBtn" class="btn btn--success btn--full" style="display: flex; align-items: center; justify-content: center; gap: 6px;">
         <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
         <span>Download</span>
       </button>

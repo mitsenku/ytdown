@@ -96,9 +96,23 @@ def _sanitize_filename(name: str) -> str:
 
 
 # ── Base yt-dlp options (security defaults) ───────────────────────────
+def get_ffmpeg_path():
+    import shutil
+    path = shutil.which("ffmpeg")
+    if path:
+        return path
+    try:
+        import imageio_ffmpeg
+        path = imageio_ffmpeg.get_ffmpeg_exe()
+        if path and os.path.isfile(path):
+            return path
+    except ImportError:
+        pass
+    return None
+
 def _secure_base_opts() -> dict:
     """Return yt-dlp options with security hardening."""
-    return {
+    opts = {
         "quiet": True,
         "no_warnings": True,
         # Restrict filenames to ASCII safe characters
@@ -111,7 +125,15 @@ def _secure_base_opts() -> dict:
         "writedescription": False,
         "writeannotations": False,
         "writesubtitles": False,
+        # Do not set file modification time to video upload date (prevents instant cleanup deletion)
+        "updatetime": False,
     }
+    
+    ffmpeg_path = get_ffmpeg_path()
+    if ffmpeg_path:
+        opts["ffmpeg_location"] = ffmpeg_path
+        
+    return opts
 
 
 def search_videos(query: str, max_results: int = 10) -> list:
@@ -232,9 +254,8 @@ def extract_info(url: str) -> dict:
 
 
 def _has_ffmpeg() -> bool:
-    """Check if ffmpeg is available on the system PATH."""
-    import shutil
-    return shutil.which("ffmpeg") is not None
+    """Check if ffmpeg is available on the system."""
+    return get_ffmpeg_path() is not None
 
 
 def _build_ydl_opts(
@@ -245,6 +266,8 @@ def _build_ydl_opts(
     task_id: str,
     progress_store: dict,
     cancel_flags: dict,
+    cut_start: float = None,
+    cut_end: float = None,
 ) -> dict:
     """Build yt-dlp option dict based on user selections (all inputs pre-validated)."""
 
@@ -281,6 +304,8 @@ def _build_ydl_opts(
 
     base = _secure_base_opts()
 
+    opts = {}
+
     # ── Audio-only mode ──────────────────────────────────────────────
     if mode == "audio":
         opts = {
@@ -308,50 +333,55 @@ def _build_ydl_opts(
             }]
         # Without ffmpeg: downloads raw audio stream (webm/m4a) — still playable
 
-        return opts
-
     # ── Video mode ───────────────────────────────────────────────────
-    if ffmpeg_available:
-        # With ffmpeg: merge best video + best audio
-        height_filter = {
-            "best": "",
-            "1080": "[height<=1080]",
-            "720": "[height<=720]",
-            "480": "[height<=480]",
-            "360": "[height<=360]",
-        }.get(quality, "")
-
-        format_str = (
-            f"bestvideo{height_filter}+bestaudio/best{height_filter}/bestvideo+bestaudio/best"
-        )
-        merge_format = file_format if file_format in ("mp4", "mkv", "webm") else "mp4"
-
-        return {
-            **base,
-            "format": format_str,
-            "merge_output_format": merge_format,
-            "outtmpl": outtmpl,
-            "progress_hooks": [progress_hook],
-        }
     else:
-        # Without ffmpeg: download best single-stream (already muxed video+audio)
-        height_filter = {
-            "best": "",
-            "1080": "[height<=1080]",
-            "720": "[height<=720]",
-            "480": "[height<=480]",
-            "360": "[height<=360]",
-        }.get(quality, "")
+        if ffmpeg_available:
+            # With ffmpeg: merge best video + best audio
+            height_filter = {
+                "best": "",
+                "1080": "[height<=1080]",
+                "720": "[height<=720]",
+                "480": "[height<=480]",
+                "360": "[height<=360]",
+            }.get(quality, "")
 
-        # Prefer a pre-muxed format that doesn't need ffmpeg merging
-        format_str = f"best{height_filter}/best"
+            format_str = (
+                f"bestvideo{height_filter}+bestaudio/best{height_filter}/bestvideo+bestaudio/best"
+            )
+            merge_format = file_format if file_format in ("mp4", "mkv", "webm") else "mp4"
 
-        return {
-            **base,
-            "format": format_str,
-            "outtmpl": outtmpl,
-            "progress_hooks": [progress_hook],
-        }
+            opts = {
+                **base,
+                "format": format_str,
+                "merge_output_format": merge_format,
+                "outtmpl": outtmpl,
+                "progress_hooks": [progress_hook],
+            }
+        else:
+            # Without ffmpeg: download best single-stream (already muxed video+audio)
+            height_filter = {
+                "best": "",
+                "1080": "[height<=1080]",
+                "720": "[height<=720]",
+                "480": "[height<=480]",
+                "360": "[height<=360]",
+            }.get(quality, "")
+
+            # Prefer a pre-muxed format that doesn't need ffmpeg merging
+            format_str = f"best{height_filter}/best"
+
+            opts = {
+                **base,
+                "format": format_str,
+                "outtmpl": outtmpl,
+                "progress_hooks": [progress_hook],
+            }
+
+    if cut_start is not None and cut_end is not None:
+        from yt_dlp.utils import download_range_func
+        opts["download_ranges"] = download_range_func(None, [(cut_start, cut_end)])
+
+    return opts
 
 
 def start_download(
@@ -363,6 +393,8 @@ def start_download(
     progress_store: dict,
     cancel_flags: dict,
     output_dir: str,
+    cut_start: float = None,
+    cut_end: float = None,
 ) -> None:
     """Run the download in the current thread (called from a background thread)."""
     # Final URL validation before downloading
@@ -377,20 +409,19 @@ def start_download(
     os.makedirs(output_dir, exist_ok=True)
     cancel_flags[task_id] = threading.Event()
 
-    opts = _build_ydl_opts(mode, quality, file_format, output_dir, task_id, progress_store, cancel_flags)
+    opts = _build_ydl_opts(mode, quality, file_format, output_dir, task_id, progress_store, cancel_flags, cut_start, cut_end)
 
     try:
         with yt_dlp.YoutubeDL(opts) as ydl:
             info = ydl.extract_info(url, download=True)
             if info:
-                filename = ydl.prepare_filename(info)
-                if mode == "audio":
-                    base, _ = os.path.splitext(filename)
-                    ext = file_format if file_format in ("mp3", "aac", "flac", "wav", "opus") else "mp3"
-                    filename = f"{base}.{ext}"
-                elif file_format in ("mp4", "mkv", "webm"):
-                    base, _ = os.path.splitext(filename)
-                    filename = f"{base}.{file_format}"
+                # Find the actual generated file on disk by scanning the output directory
+                filename = None
+                if os.path.exists(output_dir):
+                    for f in os.listdir(output_dir):
+                        if f.startswith(f"{task_id}_") and not f.endswith(".part") and not f.endswith(".ytdl"):
+                            filename = os.path.join(output_dir, f)
+                            break
             else:
                 filename = None
 
