@@ -418,7 +418,7 @@ body {
 
 .search-item__options {
   display: none;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(135px, 1fr));
   gap: 24px;
   align-items: start;
   padding-top: 12px;
@@ -491,7 +491,7 @@ body {
 }
 .und-dropdown-button {
   width: 100%;
-  min-height: 56px;
+  min-height: 42px;
   text-align: left;
   display: flex;
   align-items: center;
@@ -543,7 +543,7 @@ body {
 
 .neo-select {
   width: 100%;
-  padding: 12px 18px;
+  padding: 8px 14px;
   font-family: 'Inter', sans-serif;
   font-size: 0.88rem; font-weight: 600;
   color: var(--text-primary);

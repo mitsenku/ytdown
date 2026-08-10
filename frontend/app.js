@@ -254,13 +254,32 @@ function renderSearchResults(results) {
           <label>Format</label>
           <div id="item-format-dropdown-${index}" class="und-dropdown"></div>
         </div>
+        <div class="item-opt-group" style="flex: 2; min-width: 180px;">
+          <label style="display: flex; justify-content: space-between;">
+            <span>Clip</span>
+            <input type="checkbox" id="item-clip-check-${index}" style="cursor: pointer;">
+          </label>
+          <div id="item-clip-inputs-${index}" style="display: none; flex-direction: column; gap: 8px; margin-top: 4px;">
+            <div class="range-slider-container" style="padding: 8px 4px 14px 4px; position: relative; width: 100%;">
+              <div class="range-slider" style="height: 6px;">
+                <div class="range-slider__track" id="item-cut-track-${index}"></div>
+                <input type="range" id="item-cut-start-slider-${index}" min="0" max="${item.duration || 100}" value="0">
+                <input type="range" id="item-cut-end-slider-${index}" min="0" max="${item.duration || 100}" value="${item.duration || 100}">
+              </div>
+            </div>
+            <div style="display: flex; gap: 4px;">
+              <input type="text" class="neo-input" id="item-cut-start-${index}" placeholder="Start" style="padding: 6px; font-size: 0.8rem; text-align: center; width: 50%;" value="00:00:00">
+              <input type="text" class="neo-input" id="item-cut-end-${index}" placeholder="End" style="padding: 6px; font-size: 0.8rem; text-align: center; width: 50%;">
+            </div>
+          </div>
+        </div>
       </div>
     </li>
   `}).join('');
 
   // Render per-item custom dropdown components
   results.forEach((item, index) => {
-    const itemState = { mode: 'video', quality: 'best', format: 'mp4' };
+    const itemState = { mode: 'video', quality: 'best', format: 'mp4', enableCut: false, cutStart: '', cutEnd: '' };
     
     function updateItemDropdowns() {
       const opts = FORMAT_OPTIONS[itemState.mode];
@@ -285,6 +304,89 @@ function renderSearchResults(results) {
       });
     }
 
+    const clipCheck = document.getElementById(`item-clip-check-${index}`);
+    const clipInputs = document.getElementById(`item-clip-inputs-${index}`);
+    const startSlider = document.getElementById(`item-cut-start-slider-${index}`);
+    const endSlider = document.getElementById(`item-cut-end-slider-${index}`);
+    const track = document.getElementById(`item-cut-track-${index}`);
+    const startInput = document.getElementById(`item-cut-start-${index}`);
+    const endInput = document.getElementById(`item-cut-end-${index}`);
+    const duration = parseFloat(item.duration) || 100;
+
+    function updateItemSliders() {
+      if (!startSlider || !endSlider || !track || !startInput || !endInput) return;
+      let startVal = parseFloat(startSlider.value);
+      let endVal = parseFloat(endSlider.value);
+
+      const leftPct = (startVal / duration) * 100;
+      const widthPct = ((endVal - startVal) / duration) * 100;
+
+      track.style.left = `${leftPct}%`;
+      track.style.width = `${widthPct}%`;
+
+      startInput.value = formatSecondsToTime(startVal);
+      endInput.value = formatSecondsToTime(endVal);
+
+      itemState.cutStart = startInput.value;
+      itemState.cutEnd = endInput.value;
+      syncSelectedItem();
+    }
+
+    if (clipCheck) {
+      // Set initial values
+      if (endInput) endInput.value = formatSecondsToTime(duration);
+      if (startSlider && endSlider) {
+        updateItemSliders();
+      }
+
+      clipCheck.addEventListener('change', (e) => {
+        itemState.enableCut = e.target.checked;
+        clipInputs.style.display = e.target.checked ? 'flex' : 'none';
+        syncSelectedItem();
+      });
+
+      startSlider.addEventListener('input', () => {
+        if (parseFloat(startSlider.value) > parseFloat(endSlider.value)) {
+          startSlider.value = endSlider.value;
+        }
+        updateItemSliders();
+      });
+
+      endSlider.addEventListener('input', () => {
+        if (parseFloat(endSlider.value) < parseFloat(startSlider.value)) {
+          endSlider.value = startSlider.value;
+        }
+        updateItemSliders();
+      });
+
+      // Z-index correction on drag
+      startSlider.addEventListener('mousedown', () => { startSlider.style.zIndex = '10'; endSlider.style.zIndex = '9'; });
+      startSlider.addEventListener('touchstart', () => { startSlider.style.zIndex = '10'; endSlider.style.zIndex = '9'; });
+      endSlider.addEventListener('mousedown', () => { endSlider.style.zIndex = '10'; startSlider.style.zIndex = '9'; });
+      endSlider.addEventListener('touchstart', () => { endSlider.style.zIndex = '10'; startSlider.style.zIndex = '9'; });
+
+      // Handle manual input changes
+      startInput.addEventListener('change', () => {
+        const startVal = parseTimeToSeconds(startInput.value);
+        const startClamped = Math.min(Math.max(0, startVal), duration);
+        startSlider.value = startClamped;
+        if (startClamped > parseFloat(endSlider.value)) {
+          endSlider.value = startClamped;
+        }
+        updateItemSliders();
+      });
+
+      endInput.addEventListener('change', () => {
+        const endVal = parseTimeToSeconds(endInput.value);
+        const endClamped = Math.min(Math.max(0, endVal), duration);
+        endSlider.value = endClamped;
+        if (endClamped < parseFloat(startSlider.value)) {
+          startSlider.value = endClamped;
+        }
+        updateItemSliders();
+      });
+    }
+
     function syncSelectedItem() {
       const checkbox = document.querySelector(`.search-checkbox[data-url="${CSS.escape(item.url)}"]`);
       if (checkbox && checkbox.checked) {
@@ -296,6 +398,9 @@ function renderSearchResults(results) {
           mode: itemState.mode,
           quality: itemState.quality,
           format: itemState.format,
+          enableCut: itemState.enableCut,
+          cutStart: itemState.cutStart,
+          cutEnd: itemState.cutEnd,
         });
       }
     }
@@ -314,8 +419,8 @@ function handleSearchListClick(e) {
     return;
   }
 
-  // Prevent double toggling or blocking select dropdown interactions
-  if (e.target.closest('.und-dropdown') || e.target.closest('.neo-checkbox')) {
+  // Prevent toggling the checkbox when interacting with options, inputs, or dropdowns
+  if (e.target.closest('.search-item__options') || e.target.closest('.neo-checkbox')) {
     return;
   }
 
@@ -615,6 +720,7 @@ async function executeBatchDownload() {
         </div>
       </div>
       <div class="batch-item__status" id="batch-status-${i}">⏳ Queued</div>
+      <div class="batch-item__details" id="batch-details-${i}" style="display: none;"></div>
     </div>
   `).join('');
 
@@ -629,26 +735,104 @@ async function executeBatchDownload() {
     itemEl.classList.add('active');
 
     try {
+      const payload = {
+        url: info.url,
+        mode: info.mode,
+        quality: info.quality,
+        format: info.format,
+      };
+      if (info.enableCut) {
+        if (info.cutStart) payload.cut_start = info.cutStart;
+        if (info.cutEnd) payload.cut_end = info.cutEnd;
+      }
+
       const res = await fetch(`${API}/api/download`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          url: info.url,
-          mode: info.mode,
-          quality: info.quality,
-          format: info.format,
-        }),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
 
-      await waitForTask(data.task_id);
-      const finalInfo = await getTaskStatus(data.task_id);
+      // Show details and inject progress UI
+      const detailsEl = document.getElementById(`batch-details-${i}`);
+      detailsEl.innerHTML = `
+        <div class="batch-item__progress-bar-wrapper" style="margin-top: 8px;">
+          <div class="batch-item__progress">
+            <div class="batch-item__progress-bar" id="batch-progress-bar-${i}" style="width: 0%;"></div>
+          </div>
+        </div>
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 10px;">
+          <div style="display: flex; align-items: center; gap: 16px; font-size: 0.9rem; color: var(--text-secondary);">
+            <span id="batch-percent-${i}" style="font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 1rem; color: var(--primary);">0%</span>
+            <span style="display: inline-flex; align-items: center; gap: 5px;">
+              <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width: 16px; height: 16px;"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+              <span id="batch-speed-${i}">—</span>
+            </span>
+            <span style="display: inline-flex; align-items: center; gap: 5px;">
+              <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width: 16px; height: 16px;"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+              <span id="batch-eta-${i}">—</span>
+            </span>
+          </div>
+          <button class="btn btn--danger batch-cancel-btn" id="batch-cancel-${i}" style="padding: 8px 18px; font-size: 0.88rem; font-weight: 600; border-radius: var(--radius-small); display: inline-flex; align-items: center; gap: 6px; box-shadow: var(--neo-raised-sm); flex-shrink: 0;">
+            <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width: 16px; height: 16px;"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            Cancel
+          </button>
+        </div>
+      `;
+      detailsEl.style.display = 'block';
+
+      // Bind cancel event listener
+      const cancelBtn = document.getElementById(`batch-cancel-${i}`);
+      if (cancelBtn) {
+        cancelBtn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          cancelBtn.disabled = true;
+          cancelBtn.innerHTML = '<span class="spinner" style="width:14px; height:14px; margin-right:4px;"></span> Cancelling...';
+          try {
+            await fetch(`${API}/api/cancel/${data.task_id}`, { method: 'POST' });
+          } catch (err) {
+            cancelBtn.disabled = false;
+            cancelBtn.innerHTML = 'Cancel';
+          }
+        });
+      }
+
+      const finalInfo = await waitForTask(data.task_id, (progressData) => {
+        const progressBar = document.getElementById(`batch-progress-bar-${i}`);
+        const percentEl = document.getElementById(`batch-percent-${i}`);
+        const speedEl = document.getElementById(`batch-speed-${i}`);
+        const etaEl = document.getElementById(`batch-eta-${i}`);
+        const currentStatusEl = document.getElementById(`batch-status-${i}`);
+
+        if (progressData.status === 'downloading') {
+          const pct = progressData.percent || 0;
+          if (progressBar) progressBar.style.width = `${pct}%`;
+          if (percentEl) percentEl.textContent = `${pct}%`;
+          if (speedEl) speedEl.textContent = formatSpeed(progressData.speed);
+          if (etaEl) etaEl.textContent = formatEta(progressData.eta);
+        } else if (progressData.status === 'processing') {
+          if (progressBar) progressBar.style.width = '100%';
+          if (percentEl) percentEl.textContent = '100%';
+          if (currentStatusEl) {
+            currentStatusEl.textContent = progressData.message || 'Processing...';
+            currentStatusEl.className = 'batch-item__status downloading';
+          }
+          const cancelBtnEl = document.getElementById(`batch-cancel-${i}`);
+          if (cancelBtnEl) cancelBtnEl.style.display = 'none';
+        }
+      });
+
+      // Hide details after it's finished
+      detailsEl.style.display = 'none';
 
       if (finalInfo.status === 'done') {
         statusEl.textContent = '✅ Done';
-        statusEl.className = 'batch-item__status done';
+        statusEl.className = 'batch-item__status completed';
         window.open(`${API}/api/file/${data.task_id}`, '_blank');
+      } else if (finalInfo.status === 'cancelled') {
+        statusEl.textContent = '❌ Cancelled';
+        statusEl.className = 'batch-item__status failed';
       } else {
         statusEl.textContent = '❌ Failed';
         statusEl.className = 'batch-item__status failed';
@@ -656,6 +840,8 @@ async function executeBatchDownload() {
     } catch (err) {
       statusEl.textContent = '❌ Failed';
       statusEl.className = 'batch-item__status failed';
+      const detailsEl = document.getElementById(`batch-details-${i}`);
+      if (detailsEl) detailsEl.style.display = 'none';
     }
     itemEl.classList.remove('active');
   }
@@ -667,27 +853,18 @@ async function executeBatchDownload() {
 }
 
 // ── Wait for Task Status via SSE ─────────────────────────────────────
-function waitForTask(taskId) {
+function waitForTask(taskId, onProgress) {
   return new Promise((resolve) => {
     const es = new EventSource(`${API}/api/progress/${taskId}`);
     es.onmessage = (event) => {
       const data = JSON.parse(event.data);
+      if (onProgress) {
+        onProgress(data);
+      }
       if (data.status === 'done' || data.status === 'error' || data.status === 'cancelled') {
         es.close();
         resolve(data);
       }
-    };
-    es.onerror = () => { es.close(); resolve({ status: 'error' }); };
-  });
-}
-
-async function getTaskStatus(taskId) {
-  return new Promise((resolve) => {
-    const es = new EventSource(`${API}/api/progress/${taskId}`);
-    es.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      es.close();
-      resolve(data);
     };
     es.onerror = () => { es.close(); resolve({ status: 'error' }); };
   });

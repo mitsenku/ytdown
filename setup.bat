@@ -1,4 +1,5 @@
 @echo off
+set PYTHONUNBUFFERED=1
 title YT-DLP Web Interface - Setup and Launch
 color 0B
 
@@ -28,7 +29,13 @@ if errorlevel 1 (
 )
 echo  [OK] pip found
 
-:: Check FFmpeg (optional but recommended)
+:: Check FFmpeg (optional but recommended, check local paths first)
+if exist "%~dp0ffmpeg-master-latest-win64-gpl\bin" (
+    set "PATH=%~dp0ffmpeg-master-latest-win64-gpl\bin;%PATH%"
+) else if exist "%~dp0ffmpeg\bin" (
+    set "PATH=%~dp0ffmpeg\bin;%PATH%"
+)
+
 ffmpeg -version >nul 2>&1
 if errorlevel 1 (
     echo  [WARN] FFmpeg is not installed.

@@ -101,6 +101,16 @@ def get_ffmpeg_path():
     path = shutil.which("ffmpeg")
     if path:
         return path
+    # Check local workspace paths relative to this script
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    local_paths = [
+        os.path.join(base_dir, "ffmpeg-master-latest-win64-gpl", "bin", "ffmpeg.exe"),
+        os.path.join(base_dir, "ffmpeg", "bin", "ffmpeg.exe"),
+        os.path.join(base_dir, "ffmpeg.exe")
+    ]
+    for p in local_paths:
+        if os.path.isfile(p):
+            return p
     try:
         import imageio_ffmpeg
         path = imageio_ffmpeg.get_ffmpeg_exe()
