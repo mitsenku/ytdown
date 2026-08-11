@@ -24,6 +24,10 @@ let batchQuality = '1080';
 // Map: url -> { url, title, thumbnail, channel, mode, quality, format }
 const selectedVideos = new Map();
 
+function pauseAllVideos() {
+  document.querySelectorAll('video').forEach(vid => vid.pause());
+}
+
 // ── Format Options ───────────────────────────────────────────────────
 const FORMAT_OPTIONS = {
   video: {
@@ -60,6 +64,13 @@ const FORMAT_OPTIONS = {
 
 // ── Init — All Event Bindings ────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
+  document.addEventListener('play', (e) => {
+    if (e.target.tagName === 'VIDEO') {
+      document.querySelectorAll('video').forEach(vid => {
+        if (vid !== e.target) vid.pause();
+      });
+    }
+  }, true);
   initTheme();
   populateSelects();
   loadHistory();
@@ -221,6 +232,7 @@ async function searchVideos(query) {
   const btnText = document.getElementById('fetchBtnText');
   btn.disabled = true;
   btnText.innerHTML = '<span class="spinner"></span> Searching...';
+  pauseAllVideos();
   hideAll();
   selectedVideos.clear();
   updateBatchBar();
@@ -423,6 +435,15 @@ function renderSearchResults(results) {
             const videoEl = document.getElementById(`search-preview-${index}`);
             if (videoEl && startSlider) {
                videoEl.currentTime = parseFloat(startSlider.value) || 0;
+               if (endSlider) {
+                 videoEl.addEventListener('timeupdate', () => {
+                   const endVal = parseFloat(endSlider.value) || videoEl.duration;
+                   if (videoEl.currentTime >= endVal) {
+                     videoEl.pause();
+                     videoEl.currentTime = endVal;
+                   }
+                 });
+               }
             }
           } catch (err) {
             showToast('Could not load preview: ' + err.message, 'info');
@@ -518,8 +539,8 @@ function handleSearchListClick(e) {
     return;
   }
 
-  // Prevent toggling the checkbox when interacting with options, inputs, or dropdowns
-  if (e.target.closest('.search-item__options') || e.target.closest('.neo-checkbox')) {
+  // Prevent toggling the checkbox when interacting with options, inputs, dropdowns, or video player
+  if (e.target.closest('.search-item__options') || e.target.closest('.neo-checkbox') || e.target.closest('video')) {
     return;
   }
 
@@ -565,6 +586,7 @@ async function directDownloadFromSearch(url, btn) {
   const origHTML = btn.innerHTML;
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner" style="width:14px;height:14px;"></span> <span>Starting...</span>';
+  pauseAllVideos();
 
   try {
     const res = await fetch(`${API}/api/download`, {
@@ -817,6 +839,16 @@ async function loadVideoPreviewPlayer() {
       if (videoEl) {
         const startVal = parseFloat(document.getElementById('cutStartSlider')?.value) || 0;
         videoEl.currentTime = startVal;
+        const endSlider = document.getElementById('cutEndSlider');
+        if (endSlider) {
+          videoEl.addEventListener('timeupdate', () => {
+            const endVal = parseFloat(endSlider.value) || videoEl.duration;
+            if (videoEl.currentTime >= endVal) {
+              videoEl.pause();
+              videoEl.currentTime = endVal;
+            }
+          });
+        }
       }
     }
   } catch (err) {
@@ -863,6 +895,7 @@ async function startDownload() {
   const btn = document.getElementById('downloadBtn');
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span> Starting...';
+  pauseAllVideos();
   hide('errorSection');
   hide('cancelledSection');
 
@@ -922,6 +955,8 @@ async function startDownload() {
 async function executeBatchDownload() {
   if (selectedVideos.size === 0) { showToast('Select at least one video', 'error'); return; }
 
+  pauseAllVideos();
+
   const items = Array.from(selectedVideos.values());
   hide('searchResults');
   hide('formatSection');
@@ -935,46 +970,60 @@ async function executeBatchDownload() {
   if (overallStatus) overallStatus.textContent = `Queued ${items.length} video${items.length === 1 ? '' : 's'}...`;
 
   const completedTasks = [];
+  
+  let batchTotal = items.length;
+  let batchQueued = items.length;
+  let batchDownloading = 0;
+  
+  const updateSummary = () => {
+    const sumBar = document.getElementById('batchSummaryBar');
+    if (sumBar) sumBar.style.display = batchTotal > 0 ? 'flex' : 'none';
+    document.getElementById('batchTotalCount').textContent = batchTotal;
+    document.getElementById('batchDownloadingCount').textContent = batchDownloading;
+    document.getElementById('batchQueuedCount').textContent = batchQueued;
+  };
+  
+  const clearBtn = document.getElementById('batchClearCompletedBtn');
+  if (clearBtn) {
+    clearBtn.onclick = () => {
+      document.querySelectorAll('.batch-item.completed-item').forEach(el => {
+        el.remove();
+        batchTotal--;
+      });
+      updateSummary();
+    };
+  }
+  
+  updateSummary();
 
   const queue = document.getElementById('batchQueue');
   queue.innerHTML = items.map((info, i) => {
     const isAudio = info.mode === 'audio';
-    return `
-    <div class="batch-item" id="batch-${i}" data-url="${escapeAttr(info.url)}">
+    return `<div class="batch-item" id="batch-${i}" data-url="${escapeAttr(info.url)}">
       <div class="batch-item__main">
-        <div class="batch-item__left">
+        <div style="display: flex; gap: 16px; align-items: flex-start; width: 100%;">
           <span class="batch-item__num">${i + 1}</span>
-          <div class="batch-item__thumb">
-            <img src="${escapeAttr(info.thumbnail || '')}" alt="${escapeHtml(info.title)}" onerror="this.style.display='none'">
-            <div class="batch-item__type-badge">
-              ${isAudio 
-                ? `<svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg>` 
-                : `<svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg>`
-              }
+          <div class="batch-item__text" style="flex: 1; min-width: 0;">
+            <div class="batch-item__title" title="${escapeHtml(info.title)}" style="font-size: 1.05rem; font-weight: 700; color: var(--text-primary); margin-bottom: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(info.title)}</div>
+            <div class="batch-item__meta-text" style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 12px; font-weight: 500; letter-spacing: 0.3px;">
+              ${info.mode.toUpperCase()} &bull; ${info.format.toUpperCase()} &bull; ${info.quality === 'best' ? 'best' : (isAudio ? info.quality + ' kbps' : info.quality + 'p')}
+              ${info.enableCut ? ` &bull; ✂ ${escapeHtml(info.cutStart || '0')} &ndash; ${escapeHtml(info.cutEnd || 'End')}` : ''}
+            </div>
+            <div class="batch-item__status pending" id="batch-status-${i}" style="display: flex; align-items: center; gap: 6px; font-size: 0.9rem; font-weight: 600; color: var(--text-secondary);">
+              <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2.5" style="width: 16px; height: 16px;"><path d="M12 2v20"></path><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+              <span style="color: var(--text-primary);">Queued</span>
             </div>
           </div>
-          <div class="batch-item__text">
-            <div class="batch-item__title" title="${escapeHtml(info.title)}">${escapeHtml(info.title)}</div>
-            <div class="batch-item__meta-tags">
-              <span class="batch-item__badge batch-item__badge--mode">${info.mode.toUpperCase()}</span>
-              <span class="batch-item__badge">${info.format.toUpperCase()}</span>
-              <span class="batch-item__badge">${info.quality === 'best' ? 'Best Quality' : (isAudio ? info.quality + ' kbps' : info.quality + 'p')}</span>
-              ${info.enableCut ? `<span class="batch-item__badge batch-item__badge--clip">✂ ${escapeHtml(info.cutStart || '0')} – ${escapeHtml(info.cutEnd || 'End')}</span>` : ''}
-            </div>
-          </div>
-        </div>
-        <div class="batch-item__actions-right">
-          <div class="batch-item__status pending" id="batch-status-${i}">
-            <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width: 14px; height: 14px;"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-            <span>Queued</span>
-          </div>
-          <button class="btn btn--success btn--sm batch-item__save-btn" id="batch-save-${i}" style="display: none; align-items: center; gap: 6px;" type="button">
+          <button class="batch-item__menu-btn" style="background: var(--surface-secondary); border: 1px solid var(--glass-border); border-radius: 8px; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--text-secondary); box-shadow: var(--neo-raised-sm); flex-shrink: 0;">
+            <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width: 18px; height: 18px;"><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg>
+          </button>
+          <button class="btn btn--success btn--sm batch-item__save-btn" id="batch-save-${i}" style="display: none; align-items: center; gap: 6px; position: absolute; right: 24px; bottom: 24px;" type="button">
             <svg class="svg-icon svg-icon--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
             <span>Save</span>
           </button>
         </div>
       </div>
-      <div class="batch-item__details" id="batch-details-${i}" style="display: none;"></div>
+      <div class="batch-item__details" id="batch-details-${i}" style="display: none; width: 100%;"></div>
     </div>
   `}).join('');
 
@@ -993,6 +1042,10 @@ async function executeBatchDownload() {
     `;
     statusEl.className = 'batch-item__status downloading';
     itemEl.classList.add('active');
+    
+    batchQueued--;
+    batchDownloading++;
+    updateSummary();
 
     try {
       const payload = {
@@ -1015,27 +1068,40 @@ async function executeBatchDownload() {
       if (!res.ok) throw new Error(data.error);
 
       // Show details and inject progress UI
+      // Show details and inject progress UI
       const detailsEl = document.getElementById(`batch-details-${i}`);
       detailsEl.innerHTML = `
-        <div class="batch-item__progress-bar-wrapper" style="margin-top: 6px;">
-          <div class="batch-item__progress">
-            <div class="batch-item__progress-bar" id="batch-progress-bar-${i}" style="width: 0%;"></div>
-          </div>
+        <div class="batch-item__progress-bar-wrapper" style="width: 100%; height: 6px; background: var(--surface-secondary); border-radius: 99px; margin-top: 4px; border: 1px solid var(--glass-border); overflow: hidden;">
+          <div class="batch-item__progress-bar" id="batch-progress-bar-${i}" style="width: 0%; height: 100%; background: linear-gradient(90deg, var(--primary) 0%, #FF7A41 100%); border-radius: 99px; transition: width 0.15s linear;"></div>
         </div>
-        <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 10px;">
-          <div style="display: flex; align-items: center; gap: 16px; font-size: 0.9rem; color: var(--text-secondary);">
-            <span id="batch-percent-${i}" style="font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 1rem; color: var(--primary);">0%</span>
-            <span style="display: inline-flex; align-items: center; gap: 5px;">
-              <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width: 16px; height: 16px;"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+        <div class="batch-progress-details">
+          <div class="batch-progress-stats">
+            <div id="batch-percent-${i}" style="font-family: 'JetBrains Mono', monospace; font-weight: 800; font-size: 1.25rem; color: var(--primary); min-width: 50px;">0%</div>
+            
+            <div class="batch-progress-stat">
+              <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width: 18px; height: 18px; color: var(--text-secondary);"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
               <span id="batch-speed-${i}">—</span>
-            </span>
-            <span style="display: inline-flex; align-items: center; gap: 5px;">
-              <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width: 16px; height: 16px;"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-              <span id="batch-eta-${i}">—</span>
-            </span>
+            </div>
+            
+            <div class="batch-progress-stat">
+              <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width: 18px; height: 18px; color: var(--text-secondary);"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+              <div class="batch-progress-stat-stack">
+                <span id="batch-eta-${i}">—</span>
+                <span>Time left</span>
+              </div>
+            </div>
+            
+            <div class="batch-progress-stat">
+              <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width: 18px; height: 18px; color: var(--text-secondary);"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>
+              <div class="batch-progress-stat-stack">
+                <span id="batch-downloaded-${i}">— / —</span>
+                <span>Downloaded</span>
+              </div>
+            </div>
           </div>
-          <button class="btn btn--danger batch-cancel-btn" id="batch-cancel-${i}" style="padding: 6px 14px; font-size: 0.82rem; font-weight: 600; border-radius: var(--radius-small); display: inline-flex; align-items: center; gap: 6px; box-shadow: var(--neo-raised-sm); flex-shrink: 0;">
-            <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px;"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          
+          <button class="btn btn--danger batch-cancel-btn" id="batch-cancel-${i}" style="padding: 6px 16px; font-size: 0.85rem; font-weight: 700; border-radius: 8px; display: inline-flex; align-items: center; gap: 6px; box-shadow: var(--neo-raised-sm); flex-shrink: 0; background: transparent; color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3);">
+            <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width: 16px; height: 16px;"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
             Cancel
           </button>
         </div>
@@ -1065,12 +1131,19 @@ async function executeBatchDownload() {
         const etaEl = document.getElementById(`batch-eta-${i}`);
         const currentStatusEl = document.getElementById(`batch-status-${i}`);
 
+        const downloadedEl = document.getElementById(`batch-downloaded-${i}`);
+
         if (progressData.status === 'downloading') {
           const pct = progressData.percent || 0;
           if (progressBar) progressBar.style.width = `${pct}%`;
           if (percentEl) percentEl.textContent = `${pct}%`;
           if (speedEl) speedEl.textContent = formatSpeed(progressData.speed);
           if (etaEl) etaEl.textContent = formatEta(progressData.eta);
+          if (downloadedEl) {
+            const downStr = formatBytes(progressData.downloaded_bytes);
+            const totalStr = formatBytes(progressData.total_bytes);
+            downloadedEl.textContent = `${downStr} / ${totalStr}`;
+          }
         } else if (progressData.status === 'processing') {
           if (progressBar) progressBar.style.width = '100%';
           if (percentEl) percentEl.textContent = '100%';
@@ -1086,7 +1159,6 @@ async function executeBatchDownload() {
         }
       });
 
-      // Hide details after it's finished
       detailsEl.style.display = 'none';
 
       if (finalInfo.status === 'done') {
@@ -1096,13 +1168,13 @@ async function executeBatchDownload() {
         `;
         statusEl.className = 'batch-item__status completed';
         
-        // Show individual Save button
         if (saveBtn) {
           saveBtn.style.display = 'inline-flex';
           saveBtn.onclick = () => {
             window.open(`${API}/api/file/${data.task_id}`, '_blank');
           };
         }
+        itemEl.classList.add('completed-item');
 
         completedTasks.push({ taskId: data.task_id, title: info.title });
         if (saveAllBtn) saveAllBtn.style.display = 'inline-flex';
@@ -1112,12 +1184,14 @@ async function executeBatchDownload() {
           <span>Cancelled</span>
         `;
         statusEl.className = 'batch-item__status failed';
+        itemEl.classList.add('completed-item');
       } else {
         statusEl.innerHTML = `
           <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width: 14px; height: 14px;"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
           <span>Failed</span>
         `;
         statusEl.className = 'batch-item__status failed';
+        itemEl.classList.add('completed-item');
       }
     } catch (err) {
       statusEl.innerHTML = `
@@ -1125,10 +1199,14 @@ async function executeBatchDownload() {
         <span>Failed</span>
       `;
       statusEl.className = 'batch-item__status failed';
+      itemEl.classList.add('completed-item');
       const detailsEl = document.getElementById(`batch-details-${i}`);
       if (detailsEl) detailsEl.style.display = 'none';
+    } finally {
+      itemEl.classList.remove('active');
+      batchDownloading--;
+      updateSummary();
     }
-    itemEl.classList.remove('active');
   }
 
   if (overallStatus) {
@@ -1389,9 +1467,14 @@ function formatSpeed(b) {
 }
 function formatEta(s) {
   if (!s || s <= 0) return '—';
-  if (s >= 3600) return `${Math.floor(s/3600)}h ${Math.floor((s%3600)/60)}m`;
-  if (s >= 60) return `${Math.floor(s/60)}m ${s%60}s`;
-  return `${Math.round(s)}s`;
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = Math.floor(s % 60);
+  return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+}
+function formatBytes(b) {
+  if (!b) return '—';
+  if (b >= 1048576) return `${(b/1048576).toFixed(1)} MB`;
+  if (b >= 1024) return `${(b/1024).toFixed(1)} KB`;
+  return `${b} B`;
 }
 function timeAgo(ts) {
   const d = Math.floor(Date.now()/1000 - ts);

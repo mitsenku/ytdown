@@ -279,6 +279,44 @@
         </div>
       </div>
       <div class="batch-queue" id="batchQueue"></div>
+      
+      <!-- Batch Summary Footer -->
+      <div class="batch-summary-bar" id="batchSummaryBar" style="display: none;">
+        <div class="batch-summary-stats">
+          <div class="batch-summary-stat">
+            <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+            <div class="batch-summary-stat-text">
+              <span id="batchTotalCount" class="batch-summary-num">0</span>
+              <span class="batch-summary-label">Total</span>
+            </div>
+          </div>
+          
+          <div class="batch-summary-divider"></div>
+          
+          <div class="batch-summary-stat" style="color: var(--primary);">
+            <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+            <div class="batch-summary-stat-text">
+              <span id="batchDownloadingCount" class="batch-summary-num">0</span>
+              <span class="batch-summary-label">Downloading</span>
+            </div>
+          </div>
+          
+          <div class="batch-summary-divider"></div>
+          
+          <div class="batch-summary-stat" style="color: #f59e0b;">
+            <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20"></path><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+            <div class="batch-summary-stat-text">
+              <span id="batchQueuedCount" class="batch-summary-num">0</span>
+              <span class="batch-summary-label">Queued</span>
+            </div>
+          </div>
+        </div>
+        
+        <button id="batchClearCompletedBtn" class="btn btn--secondary btn--sm" type="button" style="background: var(--surface-secondary); color: var(--text-primary); border: none; box-shadow: var(--neo-raised-sm);">
+          <svg class="svg-icon svg-icon--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+          <span>Clear Completed</span>
+        </button>
+      </div>
     </section>
 
     <!-- Download Complete -->
