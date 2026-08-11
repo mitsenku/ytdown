@@ -135,38 +135,99 @@
         </div>
       </div>
       <!-- Video Duration Section (Clipping) -->
-      <div class="duration-cut-section" id="durationCutSection" style="margin-top: 18px; margin-bottom: 22px; padding-top: 18px; border-top: 1px solid var(--glass-border);">
-        <label class="neo-checkbox" style="margin-bottom: 12px;">
-          <input type="checkbox" id="enableCutCheckbox">
-          <span class="neo-checkbox__mark"></span>
-          <span>Download specific part of the video (clip)</span>
-        </label>
-        <div class="duration-cut-inputs" id="cutInputsContainer" style="display: none; flex-direction: column; gap: 16px; margin-top: 14px;">
-          <!-- Dual Range Slider -->
-          <div class="range-slider-container" style="padding: 10px 4px 20px 4px; position: relative;">
-            <div class="range-slider">
-              <div class="range-slider__track" id="cutSliderTrack"></div>
-              <input type="range" id="cutStartSlider" min="0" max="100" value="0">
-              <input type="range" id="cutEndSlider" min="0" max="100" value="100">
+      <div class="duration-cut-section" id="durationCutSection">
+        <div class="clip-section-header">
+          <div class="clip-section-header__left">
+            <label class="modern-toggle" for="enableCutCheckbox" title="Toggle clip">
+              <input type="checkbox" id="enableCutCheckbox" class="modern-toggle__input">
+              <span class="modern-toggle__track">
+                <span class="modern-toggle__thumb"></span>
+              </span>
+            </label>
+            <label for="enableCutCheckbox" class="clip-section-title">Clip</label>
+          </div>
+          <button type="button" class="clip-collapse-btn is-collapsed" id="clipCollapseBtn" aria-label="Toggle clip controls" title="Collapse / Expand clip controls">
+            <svg class="svg-icon clip-chevron-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+          </button>
+        </div>
+
+        <div class="duration-cut-inputs is-hidden" id="cutInputsContainer">
+          <!-- Dual Range Slider with floating handle badges -->
+          <div class="range-slider-wrapper">
+            <div class="range-slider-container">
+              <div class="range-slider" id="cutRangeSlider">
+                <div class="range-slider__track" id="cutSliderTrack"></div>
+                <div class="slider-handle-badge slider-handle-badge--start" id="startHandleBadge">00:00:00</div>
+                <div class="slider-handle-badge slider-handle-badge--end" id="endHandleBadge">00:00:00</div>
+                <input type="range" id="cutStartSlider" min="0" max="100" value="0" aria-label="Clip start timestamp">
+                <input type="range" id="cutEndSlider" min="0" max="100" value="100" aria-label="Clip end timestamp">
+              </div>
+            </div>
+            <div class="range-slider__labels">
+              <span class="range-slider__label-item" id="sliderMinLabel">00:00:00</span>
+              <span class="range-slider__duration-badge" id="sliderClipDuration">Clip Length: 00:00:00</span>
+              <span class="range-slider__label-item" id="sliderMaxLabel">00:00:00</span>
             </div>
           </div>
-          <!-- Inputs Row -->
-          <div style="display: flex; align-items: center; gap: 24px; width: 100%;">
-            <div class="format-group" style="flex: 1;">
-              <label style="font-size: 0.82rem; font-weight: 700; color: var(--text-secondary); text-transform: uppercase;">Start Time (HH:MM:SS)</label>
-              <input type="text" id="cutStartInput" class="neo-input" placeholder="00:00:00" style="text-align: center; font-family: 'JetBrains Mono', monospace;" value="00:00:00">
+
+          <!-- Time Inputs Row -->
+          <div class="clip-time-inputs-row">
+            <div class="clip-time-field">
+              <label for="cutStartInput" class="clip-time-label">Start Time <span class="clip-time-label__format">(HH:MM:SS)</span></label>
+              <div class="clip-input-card">
+                <div class="clip-input-icon" aria-hidden="true">
+                  <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <polyline points="12 6 12 12 16 14"></polyline>
+                  </svg>
+                </div>
+                <input type="text" id="cutStartInput" class="clip-time-input" placeholder="00:00:00" value="00:00:00" spellcheck="false" autocomplete="off" aria-label="Start time in HH:MM:SS">
+                <div class="clip-input-stepper">
+                  <button type="button" class="stepper-btn" id="startStepUp" title="Add 1 second" aria-label="Increase start time">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>
+                  </button>
+                  <button type="button" class="stepper-btn" id="startStepDown" title="Subtract 1 second" aria-label="Decrease start time">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                  </button>
+                </div>
+              </div>
             </div>
-            <div class="format-group" style="flex: 1;">
-              <label style="font-size: 0.82rem; font-weight: 700; color: var(--text-secondary); text-transform: uppercase;">End Time (HH:MM:SS)</label>
-              <input type="text" id="cutEndInput" class="neo-input" placeholder="00:00:00" style="text-align: center; font-family: 'JetBrains Mono', monospace;">
+
+            <div class="clip-time-field">
+              <label for="cutEndInput" class="clip-time-label">End Time <span class="clip-time-label__format">(HH:MM:SS)</span></label>
+              <div class="clip-input-card">
+                <div class="clip-input-icon" aria-hidden="true">
+                  <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <polyline points="12 6 12 12 16 14"></polyline>
+                  </svg>
+                </div>
+                <input type="text" id="cutEndInput" class="clip-time-input" placeholder="00:00:00" value="00:00:00" spellcheck="false" autocomplete="off" aria-label="End time in HH:MM:SS">
+                <div class="clip-input-stepper">
+                  <button type="button" class="stepper-btn" id="endStepUp" title="Add 1 second" aria-label="Increase end time">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>
+                  </button>
+                  <button type="button" class="stepper-btn" id="endStepDown" title="Subtract 1 second" aria-label="Decrease end time">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
       </div>
-      <button id="downloadBtn" class="btn btn--success btn--full" style="display: flex; align-items: center; justify-content: center; gap: 6px;">
-        <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-        <span>Download</span>
-      </button>
+      <div class="download-action-wrapper">
+        <button id="downloadBtn" class="btn btn--download" type="button">
+          <svg class="svg-icon download-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="7 10 12 15 17 10"></polyline>
+            <line x1="12" y1="15" x2="12" y2="3"></line>
+          </svg>
+          <span id="downloadBtnText">Download</span>
+        </button>
+      </div>
     </section>
 
     <!-- Progress -->

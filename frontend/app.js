@@ -85,15 +85,37 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('selectAllCheckbox').addEventListener('change', toggleSelectAll);
   document.getElementById('batchDownloadBtn').addEventListener('click', executeBatchDownload);
 
-  // Duration clipping checkbox toggle
-  document.getElementById('enableCutCheckbox').addEventListener('change', (e) => {
-    document.getElementById('cutInputsContainer').style.display = e.target.checked ? 'flex' : 'none';
-  });
+  // Duration clipping toggle switch & collapse handlers
+  const enableCutCheckbox = document.getElementById('enableCutCheckbox');
+  const cutInputsContainer = document.getElementById('cutInputsContainer');
+  const clipCollapseBtn = document.getElementById('clipCollapseBtn');
 
-  // Event delegation for search results (checkboxes, select buttons, per-item options)
-  const searchList = document.getElementById('searchList');
-  searchList.addEventListener('click', handleSearchListClick);
-  searchList.addEventListener('change', handleSearchListChange);
+  if (enableCutCheckbox && cutInputsContainer) {
+    enableCutCheckbox.addEventListener('change', (e) => {
+      if (e.target.checked) {
+        cutInputsContainer.classList.remove('is-hidden');
+        if (clipCollapseBtn) clipCollapseBtn.classList.remove('is-collapsed');
+        updateCutSliders();
+      } else {
+        cutInputsContainer.classList.add('is-hidden');
+        if (clipCollapseBtn) clipCollapseBtn.classList.add('is-collapsed');
+      }
+    });
+  }
+
+  if (clipCollapseBtn && enableCutCheckbox && cutInputsContainer) {
+    clipCollapseBtn.addEventListener('click', () => {
+      if (!enableCutCheckbox.checked) {
+        enableCutCheckbox.checked = true;
+        cutInputsContainer.classList.remove('is-hidden');
+        clipCollapseBtn.classList.remove('is-collapsed');
+        updateCutSliders();
+      } else {
+        const isCurrentlyHidden = cutInputsContainer.classList.toggle('is-hidden');
+        clipCollapseBtn.classList.toggle('is-collapsed', isCurrentlyHidden);
+      }
+    });
+  }
 
   // Sync clipping range sliders
   const startSlider = document.getElementById('cutStartSlider');
@@ -113,7 +135,20 @@ document.addEventListener('DOMContentLoaded', () => {
   if (startInput && endInput) {
     startInput.addEventListener('change', handleTimeInputChange);
     endInput.addEventListener('change', handleTimeInputChange);
+    startInput.addEventListener('blur', handleTimeInputChange);
+    endInput.addEventListener('blur', handleTimeInputChange);
   }
+
+  // Stepper buttons for 1-second nudging
+  const startStepUp = document.getElementById('startStepUp');
+  const startStepDown = document.getElementById('startStepDown');
+  const endStepUp = document.getElementById('endStepUp');
+  const endStepDown = document.getElementById('endStepDown');
+
+  if (startStepUp) startStepUp.addEventListener('click', () => stepTime('start', 1));
+  if (startStepDown) startStepDown.addEventListener('click', () => stepTime('start', -1));
+  if (endStepUp) endStepUp.addEventListener('click', () => stepTime('end', 1));
+  if (endStepDown) endStepDown.addEventListener('click', () => stepTime('end', -1));
 
   // Event delegation for history save buttons
   document.getElementById('historyList').addEventListener('click', handleHistoryClick);
@@ -596,6 +631,10 @@ function renderVideoPreview(info) {
   const duration = info.duration || 0;
   const startSlider = document.getElementById('cutStartSlider');
   const endSlider = document.getElementById('cutEndSlider');
+  const cutCheck = document.getElementById('enableCutCheckbox');
+  const cutInputs = document.getElementById('cutInputsContainer');
+  const collapseBtn = document.getElementById('clipCollapseBtn');
+  const maxLabel = document.getElementById('sliderMaxLabel');
 
   if (startSlider && endSlider) {
     startSlider.min = 0;
@@ -607,8 +646,13 @@ function renderVideoPreview(info) {
     endSlider.value = duration;
   }
 
-  document.getElementById('enableCutCheckbox').checked = false;
-  document.getElementById('cutInputsContainer').style.display = 'none';
+  if (maxLabel) {
+    maxLabel.textContent = formatSecondsToTime(duration);
+  }
+
+  if (cutCheck) cutCheck.checked = false;
+  if (cutInputs) cutInputs.classList.add('is-hidden');
+  if (collapseBtn) collapseBtn.classList.add('is-collapsed');
 
   updateCutSliders();
 }
@@ -955,11 +999,27 @@ function resetUI() {
   updateBatchBar();
   if (eventSource) { eventSource.close(); eventSource = null; }
   document.getElementById('urlInput').value = '';
-  document.getElementById('urlInput').focus();
-  document.getElementById('enableCutCheckbox').checked = false;
-  document.getElementById('cutInputsContainer').style.display = 'none';
-  document.getElementById('cutStartInput').value = '00:00:00';
-  document.getElementById('cutEndInput').value = '';
+  const cutCheck = document.getElementById('enableCutCheckbox');
+  const cutInputs = document.getElementById('cutInputsContainer');
+  const collapseBtn = document.getElementById('clipCollapseBtn');
+  if (cutCheck) cutCheck.checked = false;
+  if (cutInputs) cutInputs.classList.add('is-hidden');
+  if (collapseBtn) collapseBtn.classList.add('is-collapsed');
+  const cutStartInput = document.getElementById('cutStartInput');
+  const cutEndInput = document.getElementById('cutEndInput');
+  if (cutStartInput) cutStartInput.value = '00:00:00';
+  if (cutEndInput) cutEndInput.value = '00:00:00';
+  const startSlider = document.getElementById('cutStartSlider');
+  const endSlider = document.getElementById('cutEndSlider');
+  if (startSlider && endSlider) {
+    startSlider.min = 0;
+    startSlider.max = 100;
+    startSlider.value = 0;
+    endSlider.min = 0;
+    endSlider.max = 100;
+    endSlider.value = 100;
+  }
+  updateCutSliders();
   const thumbContainer = document.querySelector('.video-thumb');
   if (thumbContainer) {
     thumbContainer.innerHTML = `<img id="videoThumb" src="" alt="Video thumbnail">`;
@@ -1158,6 +1218,7 @@ document.addEventListener('click', () => {
 
 // ── Range Slider Handlers & Embed Helpers ──────────────────────────
 function getYouTubeEmbedUrl(url) {
+  if (!url) return null;
   const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
   const match = url.match(regExp);
   if (match && match[2].length === 11) {
@@ -1167,10 +1228,14 @@ function getYouTubeEmbedUrl(url) {
 }
 
 function formatSecondsToTime(seconds) {
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  const s = Math.floor(seconds % 60);
-  const ms = Math.round((seconds % 1) * 100);
+  if (seconds === null || seconds === undefined || isNaN(seconds) || seconds < 0) {
+    seconds = 0;
+  }
+  const total = Math.floor(Number(seconds));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = Math.floor(total % 60);
+  const ms = Math.round((Number(seconds) % 1) * 100);
   let time = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
   if (ms > 0) {
     time += `.${String(ms).padStart(2, '0')}`;
@@ -1179,25 +1244,49 @@ function formatSecondsToTime(seconds) {
 }
 
 function parseTimeToSeconds(timeStr) {
+  if (typeof timeStr !== 'string') {
+    if (typeof timeStr === 'number' && !isNaN(timeStr)) return timeStr;
+    return 0;
+  }
   timeStr = timeStr.trim();
   if (!timeStr) return 0;
   if (/^\d+(\.\d+)?$/.test(timeStr)) {
-    return parseFloat(timeStr);
+    return parseFloat(timeStr) || 0;
   }
   const parts = timeStr.split(':');
   try {
     if (parts.length === 2) {
-      return parseInt(parts[0], 10) * 60 + parseFloat(parts[1]);
+      return (parseInt(parts[0], 10) || 0) * 60 + (parseFloat(parts[1]) || 0);
     } else if (parts.length === 3) {
-      return parseInt(parts[0], 10) * 3600 + parseInt(parts[1], 10) * 60 + parseFloat(parts[2]);
+      return (parseInt(parts[0], 10) || 0) * 3600 + (parseInt(parts[1], 10) || 0) * 60 + (parseFloat(parts[2]) || 0);
     }
   } catch(e) {}
   return 0;
 }
 
+function stepTime(field, deltaSeconds) {
+  const startSlider = document.getElementById('cutStartSlider');
+  const endSlider = document.getElementById('cutEndSlider');
+  if (!startSlider || !endSlider) return;
+
+  const max = parseFloat(startSlider.max) || 100;
+  let startVal = parseFloat(startSlider.value) || 0;
+  let endVal = parseFloat(endSlider.value) || max;
+
+  if (field === 'start') {
+    let newStart = Math.max(0, Math.min(startVal + deltaSeconds, endVal));
+    startSlider.value = newStart;
+  } else if (field === 'end') {
+    let newEnd = Math.max(startVal, Math.min(endVal + deltaSeconds, max));
+    endSlider.value = newEnd;
+  }
+  updateCutSliders();
+}
+
 function handleStartSliderInput() {
   const startSlider = document.getElementById('cutStartSlider');
   const endSlider = document.getElementById('cutEndSlider');
+  if (!startSlider || !endSlider) return;
   if (parseFloat(startSlider.value) > parseFloat(endSlider.value)) {
     startSlider.value = endSlider.value;
   }
@@ -1207,6 +1296,7 @@ function handleStartSliderInput() {
 function handleEndSliderInput() {
   const startSlider = document.getElementById('cutStartSlider');
   const endSlider = document.getElementById('cutEndSlider');
+  if (!startSlider || !endSlider) return;
   if (parseFloat(endSlider.value) < parseFloat(startSlider.value)) {
     endSlider.value = startSlider.value;
   }
@@ -1214,23 +1304,29 @@ function handleEndSliderInput() {
 }
 
 function handleTimeInputChange() {
-  const startVal = parseTimeToSeconds(document.getElementById('cutStartInput').value);
-  const endVal = parseTimeToSeconds(document.getElementById('cutEndInput').value);
-
+  const startInput = document.getElementById('cutStartInput');
+  const endInput = document.getElementById('cutEndInput');
   const startSlider = document.getElementById('cutStartSlider');
   const endSlider = document.getElementById('cutEndSlider');
+
+  if (!startInput || !endInput || !startSlider || !endSlider) return;
+
   const max = parseFloat(startSlider.max) || 100;
+  let startVal = parseTimeToSeconds(startInput.value);
+  let endVal = parseTimeToSeconds(endInput.value);
 
-  const startClamped = Math.max(0, Math.min(startVal, max));
-  const endClamped = Math.max(0, Math.min(endVal, max));
+  if (isNaN(startVal) || startVal < 0) startVal = 0;
+  if (isNaN(endVal) || endVal <= 0) endVal = max;
 
-  if (startClamped <= endClamped) {
-    startSlider.value = startClamped;
-    endSlider.value = endClamped;
-  } else {
-    startSlider.value = endClamped;
-    endSlider.value = startClamped;
+  startVal = Math.max(0, Math.min(startVal, max));
+  endVal = Math.max(0, Math.min(endVal, max));
+
+  if (startVal > endVal) {
+    endVal = startVal;
   }
+
+  startSlider.value = startVal;
+  endSlider.value = endVal;
   updateCutSliders();
 }
 
@@ -1240,19 +1336,56 @@ function updateCutSliders() {
   const track = document.getElementById('cutSliderTrack');
   const startInput = document.getElementById('cutStartInput');
   const endInput = document.getElementById('cutEndInput');
+  const startBadge = document.getElementById('startHandleBadge');
+  const endBadge = document.getElementById('endHandleBadge');
+  const durationBadge = document.getElementById('sliderClipDuration');
+  const minLabel = document.getElementById('sliderMinLabel');
+  const maxLabel = document.getElementById('sliderMaxLabel');
 
   if (!startSlider || !endSlider || !track || !startInput || !endInput) return;
 
-  let startVal = parseFloat(startSlider.value);
-  let endVal = parseFloat(endSlider.value);
   const max = parseFloat(startSlider.max) || 100;
+  let startVal = parseFloat(startSlider.value) || 0;
+  let endVal = parseFloat(endSlider.value) || max;
 
-  const leftPct = (startVal / max) * 100;
-  const widthPct = ((endVal - startVal) / max) * 100;
+  if (startVal > endVal) {
+    startVal = endVal;
+    startSlider.value = startVal;
+  }
+
+  const leftPct = max > 0 ? Math.max(0, Math.min(100, (startVal / max) * 100)) : 0;
+  const rightPct = max > 0 ? Math.max(0, Math.min(100, (endVal / max) * 100)) : 100;
+  const widthPct = Math.max(0, rightPct - leftPct);
 
   track.style.left = `${leftPct}%`;
   track.style.width = `${widthPct}%`;
 
-  startInput.value = formatSecondsToTime(startVal);
-  endInput.value = formatSecondsToTime(endVal);
+  const formattedStart = formatSecondsToTime(startVal);
+  const formattedEnd = formatSecondsToTime(endVal);
+  const formattedDiff = formatSecondsToTime(Math.max(0, endVal - startVal));
+
+  startInput.value = formattedStart;
+  endInput.value = formattedEnd;
+
+  if (startBadge) {
+    startBadge.textContent = formattedStart;
+    startBadge.style.left = `${leftPct}%`;
+  }
+
+  if (endBadge) {
+    endBadge.textContent = formattedEnd;
+    endBadge.style.left = `${rightPct}%`;
+  }
+
+  if (durationBadge) {
+    durationBadge.textContent = `Clip Length: ${formattedDiff}`;
+  }
+
+  if (minLabel) {
+    minLabel.textContent = '00:00:00';
+  }
+
+  if (maxLabel) {
+    maxLabel.textContent = formatSecondsToTime(max);
+  }
 }
