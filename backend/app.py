@@ -30,14 +30,17 @@ from flask_cors import CORS
 from downloader import (
     extract_info, search_videos, start_download,
     cancel_download, delete_file, validate_url,
+    download_preview,
 )
 
 # ── Configuration ────────────────────────────────────────────────────
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DOWNLOAD_DIR = os.path.normpath(os.path.join(BASE_DIR, "..", "downloads"))
 FRONTEND_DIR = os.path.normpath(os.path.join(BASE_DIR, "..", "frontend"))
+PREVIEW_DIR = os.path.normpath(os.path.join(BASE_DIR, "previews"))
 
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
+os.makedirs(PREVIEW_DIR, exist_ok=True)
 try:
     for f in os.listdir(DOWNLOAD_DIR):
         path = os.path.join(DOWNLOAD_DIR, f)
@@ -88,6 +91,13 @@ def start_cleanup_thread():
                                             except ValueError:
                                                 pass
                                             break
+                # Clean up old preview files (older than 15 minutes)
+                if os.path.exists(PREVIEW_DIR):
+                    for f in os.listdir(PREVIEW_DIR):
+                        path = os.path.normpath(os.path.join(PREVIEW_DIR, f))
+                        if os.path.isfile(path):
+                            if now - os.path.getmtime(path) > 15 * 60:
+                                delete_file(path)
             except Exception:
                 pass
             time.sleep(60)
@@ -142,6 +152,7 @@ def set_security_headers(response):
         "style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; "
         "font-src 'self' https://fonts.gstatic.com; "
         "img-src 'self' https://*.ytimg.com https://*.ggpht.com https://i.ytimg.com data:; "
+        "media-src 'self'; "
         "connect-src 'self'; "
         "frame-ancestors 'none'; "
         "form-action 'self'; "
@@ -441,6 +452,50 @@ def api_file(task_id):
 @app.route("/api/history")
 def api_history():
     return jsonify(list(download_history))
+
+
+# ── API: Preview download (low-quality for clip trimming) ─────────────
+@app.route("/api/preview", methods=["POST"])
+@rate_limited
+def api_preview():
+    data = request.get_json(silent=True)
+    if not data or not isinstance(data, dict):
+        return jsonify({"error": "Invalid request body"}), 400
+
+    url = data.get("url", "")
+    if not isinstance(url, str):
+        return jsonify({"error": "URL must be a string"}), 400
+
+    url = url.strip()
+    if not url:
+        return jsonify({"error": "URL is required"}), 400
+
+    if not validate_url(url):
+        return jsonify({"error": "Only YouTube URLs are allowed"}), 400
+
+    try:
+        filepath = download_preview(url, PREVIEW_DIR)
+        filename = os.path.basename(filepath)
+        return jsonify({"preview_url": f"/api/preview/{filename}"})
+    except Exception:
+        return jsonify({"error": "Failed to download preview. Try again."}), 500
+
+
+@app.route("/api/preview/<filename>")
+def api_serve_preview(filename):
+    # Only allow safe filenames (hash + extension)
+    if not re.match(r"^[a-f0-9]{32}\.[a-z0-9]{2,5}$", filename):
+        return jsonify({"error": "Invalid filename"}), 400
+
+    safe_path = os.path.normpath(os.path.join(PREVIEW_DIR, filename))
+    real_preview_dir = os.path.normpath(os.path.realpath(PREVIEW_DIR))
+    if not os.path.normpath(os.path.realpath(safe_path)).startswith(real_preview_dir):
+        return jsonify({"error": "Access denied"}), 403
+
+    if not os.path.isfile(safe_path):
+        return jsonify({"error": "Preview not found"}), 404
+
+    return send_file(safe_path, mimetype="video/mp4")
 
 
 # ── Error handlers ────────────────────────────────────────────────────

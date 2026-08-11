@@ -77,35 +77,6 @@
       <ul class="search-list" id="searchList"></ul>
     </section>
 
-    <!-- Video Preview (single video) -->
-    <section class="neo-card video-preview" id="videoPreview">
-      <div class="neo-card__header">
-        <div class="neo-card__icon">
-          <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg>
-        </div>
-        <h2 class="neo-card__title">Video Info</h2>
-      </div>
-      <div class="video-info">
-        <div class="video-thumb">
-          <img id="videoThumb" src="" alt="Video thumbnail">
-        </div>
-        <div class="video-meta">
-          <div class="video-meta__title" id="videoTitle"></div>
-          <div class="video-meta__channel" id="videoChannel"></div>
-          <div class="video-meta__stats">
-            <span class="video-meta__stat">
-              <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-              <span id="durationText">—</span>
-            </span>
-            <span class="video-meta__stat">
-              <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
-              <span id="viewsText">—</span>
-            </span>
-          </div>
-        </div>
-      </div>
-    </section>
-
     <!-- Format Selection -->
     <section class="neo-card format-section" id="formatSection">
       <div class="neo-card__header">
@@ -124,6 +95,27 @@
           <span>Audio Only</span>
         </button>
       </div>
+
+      <div class="video-info" id="videoInfo">
+        <div class="video-thumb">
+          <img id="videoThumb" src="" alt="Video thumbnail">
+        </div>
+        <div class="video-meta">
+          <div class="video-meta__title" id="videoTitle"></div>
+          <div class="video-meta__channel" id="videoChannel"></div>
+          <div class="video-meta__stats">
+            <span class="video-meta__stat">
+              <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+              <span id="durationText">—</span>
+            </span>
+            <span class="video-meta__stat">
+              <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+              <span id="viewsText">—</span>
+            </span>
+          </div>
+        </div>
+      </div>
+
       <div class="format-grid">
         <div class="format-group">
           <label>Quality</label>
@@ -265,11 +257,26 @@
 
     <!-- Batch Progress -->
     <section class="neo-card batch-progress-section" id="batchProgressSection">
-      <div class="neo-card__header">
-        <div class="neo-card__icon">
-          <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+      <div class="neo-card__header batch-header-flex">
+        <div class="batch-header-left">
+          <div class="neo-card__icon">
+            <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+          </div>
+          <div>
+            <h2 class="neo-card__title">Batch Download</h2>
+            <div class="batch-subtitle" id="batchOverallStatus">Processing downloads...</div>
+          </div>
         </div>
-        <h2 class="neo-card__title">Batch Download</h2>
+        <div class="batch-header-actions" id="batchHeaderActions">
+          <button id="batchSaveAllBtn" class="btn btn--success btn--sm" style="display: none; align-items: center; gap: 6px;" type="button">
+            <svg class="svg-icon svg-icon--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+            <span>Save All</span>
+          </button>
+          <button id="batchNewDownloadBtn" class="btn btn--secondary btn--sm" style="display: none;" type="button">
+            <svg class="svg-icon svg-icon--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+            <span>New Download</span>
+          </button>
+        </div>
       </div>
       <div class="batch-queue" id="batchQueue"></div>
     </section>

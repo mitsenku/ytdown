@@ -16,6 +16,8 @@ const API = '';
 let currentMode = 'video';
 let currentTaskId = null;
 let currentVideoUrl = '';
+let currentThumbnailUrl = '';
+let currentPreviewUrl = null;
 let eventSource = null;
 let batchQuality = '1080';
 
@@ -85,6 +87,11 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('selectAllCheckbox').addEventListener('change', toggleSelectAll);
   document.getElementById('batchDownloadBtn').addEventListener('click', executeBatchDownload);
 
+  // Search list event delegation (click on items/buttons, change on checkboxes)
+  const searchList = document.getElementById('searchList');
+  searchList.addEventListener('click', handleSearchListClick);
+  searchList.addEventListener('change', handleSearchListChange);
+
   // Duration clipping toggle switch & collapse handlers
   const enableCutCheckbox = document.getElementById('enableCutCheckbox');
   const cutInputsContainer = document.getElementById('cutInputsContainer');
@@ -96,9 +103,11 @@ document.addEventListener('DOMContentLoaded', () => {
         cutInputsContainer.classList.remove('is-hidden');
         if (clipCollapseBtn) clipCollapseBtn.classList.remove('is-collapsed');
         updateCutSliders();
+        loadVideoPreviewPlayer();
       } else {
         cutInputsContainer.classList.add('is-hidden');
         if (clipCollapseBtn) clipCollapseBtn.classList.add('is-collapsed');
+        restoreVideoThumbnail();
       }
     });
   }
@@ -110,6 +119,7 @@ document.addEventListener('DOMContentLoaded', () => {
         cutInputsContainer.classList.remove('is-hidden');
         clipCollapseBtn.classList.remove('is-collapsed');
         updateCutSliders();
+        loadVideoPreviewPlayer();
       } else {
         const isCurrentlyHidden = cutInputsContainer.classList.toggle('is-hidden');
         clipCollapseBtn.classList.toggle('is-collapsed', isCurrentlyHidden);
@@ -269,8 +279,8 @@ function renderSearchResults(results) {
         </div>
         <div class="search-item__actions">
           <button class="btn btn--primary btn--sm search-select-btn" data-url="${itemUrl}">
-            <svg class="svg-icon svg-icon--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-            <span>Inspect</span>
+            <svg class="svg-icon svg-icon--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            <span>Download</span>
           </button>
         </div>
       </div>
@@ -290,11 +300,16 @@ function renderSearchResults(results) {
           <div id="item-format-dropdown-${index}" class="und-dropdown"></div>
         </div>
         <div class="item-opt-group" style="flex: 2; min-width: 180px;">
-          <label style="display: flex; justify-content: space-between;">
-            <span>Clip</span>
-            <input type="checkbox" id="item-clip-check-${index}" style="cursor: pointer;">
-          </label>
-          <div id="item-clip-inputs-${index}" style="display: none; flex-direction: column; gap: 8px; margin-top: 4px;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <label style="margin: 0; font-size: 0.82rem; font-weight: 700; color: var(--text-secondary); text-transform: uppercase;">Clip</label>
+            <label class="modern-toggle" for="item-clip-check-${index}" title="Toggle clip" style="transform: scale(0.85); transform-origin: right center;">
+              <input type="checkbox" id="item-clip-check-${index}" class="modern-toggle__input">
+              <span class="modern-toggle__track">
+                <span class="modern-toggle__thumb"></span>
+              </span>
+            </label>
+          </div>
+          <div id="item-clip-inputs-${index}" style="display: none; flex-direction: column; gap: 8px; margin-top: 6px;">
             <div class="range-slider-container" style="padding: 8px 4px 14px 4px; position: relative; width: 100%;">
               <div class="range-slider" style="height: 6px;">
                 <div class="range-slider__track" id="item-cut-track-${index}"></div>
@@ -350,14 +365,16 @@ function renderSearchResults(results) {
 
     function updateItemSliders() {
       if (!startSlider || !endSlider || !track || !startInput || !endInput) return;
-      let startVal = parseFloat(startSlider.value);
-      let endVal = parseFloat(endSlider.value);
+      let startVal = parseFloat(startSlider.value) || 0;
+      let endVal = parseFloat(endSlider.value) || 0;
 
-      const leftPct = (startVal / duration) * 100;
-      const widthPct = ((endVal - startVal) / duration) * 100;
+      if (startVal > endVal) { startVal = endVal; startSlider.value = startVal; }
 
-      track.style.left = `${leftPct}%`;
-      track.style.width = `${widthPct}%`;
+      const leftPct = duration > 0 ? (startVal / duration) * 100 : 0;
+      const widthPct = duration > 0 ? ((endVal - startVal) / duration) * 100 : 100;
+
+      track.style.left = `${Math.max(0, Math.min(100, leftPct))}%`;
+      track.style.width = `${Math.max(0, Math.min(100, widthPct))}%`;
 
       startInput.value = formatSecondsToTime(startVal);
       endInput.value = formatSecondsToTime(endVal);
@@ -374,10 +391,50 @@ function renderSearchResults(results) {
         updateItemSliders();
       }
 
-      clipCheck.addEventListener('change', (e) => {
+      clipCheck.addEventListener('change', async (e) => {
         itemState.enableCut = e.target.checked;
         clipInputs.style.display = e.target.checked ? 'flex' : 'none';
         syncSelectedItem();
+
+        const searchItemNode = document.querySelector(`.search-item[data-url="${CSS.escape(item.url)}"]`);
+        const thumbContainer = searchItemNode.querySelector('.search-item__thumb');
+
+        if (e.target.checked) {
+          searchItemNode.classList.add('playing-preview');
+          const originalThumb = thumbContainer.innerHTML;
+          thumbContainer.dataset.originalHTML = originalThumb;
+          thumbContainer.innerHTML = `
+            <img src="${escapeAttr(item.thumbnail)}" alt="" style="filter: brightness(0.35); width: 100%; height: 100%; object-fit: cover;">
+            <div class="video-thumb__loader" style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center; flex-direction:column; color:#fff; font-size:0.8rem; background:rgba(0,0,0,0.6);">
+              <span class="spinner" style="width: 20px; height: 20px; border-width: 2px;"></span>
+              <span style="margin-top: 6px;">Loading...</span>
+            </div>
+          `;
+          try {
+            const res = await fetch(`${API}/api/preview`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ url: item.url }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Preview failed');
+
+            thumbContainer.innerHTML = `<video id="search-preview-${index}" src="${data.preview_url}" controls playsinline preload="auto" style="width: 100%; height: 100%; object-fit: contain; background: #000; border-radius: 12px;"></video>`;
+            const videoEl = document.getElementById(`search-preview-${index}`);
+            if (videoEl && startSlider) {
+               videoEl.currentTime = parseFloat(startSlider.value) || 0;
+            }
+          } catch (err) {
+            showToast('Could not load preview: ' + err.message, 'info');
+            searchItemNode.classList.remove('playing-preview');
+            thumbContainer.innerHTML = thumbContainer.dataset.originalHTML;
+          }
+        } else {
+          searchItemNode.classList.remove('playing-preview');
+          if (thumbContainer.dataset.originalHTML) {
+            thumbContainer.innerHTML = thumbContainer.dataset.originalHTML;
+          }
+        }
       });
 
       startSlider.addEventListener('input', () => {
@@ -385,6 +442,8 @@ function renderSearchResults(results) {
           startSlider.value = endSlider.value;
         }
         updateItemSliders();
+        const videoEl = document.getElementById(`search-preview-${index}`);
+        if (videoEl) videoEl.currentTime = parseFloat(startSlider.value) || 0;
       });
 
       endSlider.addEventListener('input', () => {
@@ -392,15 +451,16 @@ function renderSearchResults(results) {
           endSlider.value = startSlider.value;
         }
         updateItemSliders();
+        const videoEl = document.getElementById(`search-preview-${index}`);
+        if (videoEl) videoEl.currentTime = parseFloat(endSlider.value) || 0;
       });
 
       // Z-index correction on drag
       startSlider.addEventListener('mousedown', () => { startSlider.style.zIndex = '10'; endSlider.style.zIndex = '9'; });
-      startSlider.addEventListener('touchstart', () => { startSlider.style.zIndex = '10'; endSlider.style.zIndex = '9'; });
+      startSlider.addEventListener('touchstart', () => { startSlider.style.zIndex = '10'; endSlider.style.zIndex = '9'; }, { passive: true });
       endSlider.addEventListener('mousedown', () => { endSlider.style.zIndex = '10'; startSlider.style.zIndex = '9'; });
-      endSlider.addEventListener('touchstart', () => { endSlider.style.zIndex = '10'; startSlider.style.zIndex = '9'; });
+      endSlider.addEventListener('touchstart', () => { endSlider.style.zIndex = '10'; startSlider.style.zIndex = '9'; }, { passive: true });
 
-      // Handle manual input changes
       startInput.addEventListener('change', () => {
         const startVal = parseTimeToSeconds(startInput.value);
         const startClamped = Math.min(Math.max(0, startVal), duration);
@@ -409,6 +469,8 @@ function renderSearchResults(results) {
           endSlider.value = startClamped;
         }
         updateItemSliders();
+        const videoEl = document.getElementById(`search-preview-${index}`);
+        if (videoEl) videoEl.currentTime = parseFloat(startSlider.value) || 0;
       });
 
       endInput.addEventListener('change', () => {
@@ -419,6 +481,8 @@ function renderSearchResults(results) {
           startSlider.value = endClamped;
         }
         updateItemSliders();
+        const videoEl = document.getElementById(`search-preview-${index}`);
+        if (videoEl) videoEl.currentTime = parseFloat(endSlider.value) || 0;
       });
     }
 
@@ -450,7 +514,7 @@ function handleSearchListClick(e) {
   if (btn) {
     e.stopPropagation();
     const url = btn.dataset.url;
-    selectSearchResult(url);
+    directDownloadFromSearch(url, btn);
     return;
   }
 
@@ -469,6 +533,102 @@ function handleSearchListClick(e) {
   }
 }
 
+// ── Direct Download from Search Result ───────────────────────────────
+async function directDownloadFromSearch(url, btn) {
+  const item = btn.closest('.search-item');
+  if (!item) return;
+  const index = Array.from(document.querySelectorAll('.search-item')).indexOf(item);
+
+  const typeBtn = item.querySelector(`#item-type-dropdown-${index} .und-dropdown-button span`);
+  const qualityBtn = item.querySelector(`#item-quality-dropdown-${index} .und-dropdown-button span`);
+  const formatBtn = item.querySelector(`#item-format-dropdown-${index} .und-dropdown-button span`);
+
+  const mode = typeBtn?.textContent.toLowerCase().includes('audio') ? 'audio' : 'video';
+  const qualityLabel = qualityBtn?.textContent.trim() || '';
+  const formatLabel = formatBtn?.textContent.trim() || '';
+  const opts = FORMAT_OPTIONS[mode];
+  const quality = (opts.quality.find(o => o.label === qualityLabel) || opts.quality[0]).value;
+  const format = (opts.format.find(o => o.label === formatLabel) || opts.format[0]).value;
+
+  const payload = { url, mode, quality, format };
+
+  // Check clip settings
+  const clipCheck = document.getElementById(`item-clip-check-${index}`);
+  if (clipCheck && clipCheck.checked) {
+    const startInput = document.getElementById(`item-cut-start-${index}`);
+    const endInput = document.getElementById(`item-cut-end-${index}`);
+    if (startInput && startInput.value) payload.cut_start = startInput.value.trim();
+    if (endInput && endInput.value) payload.cut_end = endInput.value.trim();
+  }
+
+  // Disable button and show spinner
+  const origHTML = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner" style="width:14px;height:14px;"></span> <span>Starting...</span>';
+
+  try {
+    const res = await fetch(`${API}/api/download`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to start download');
+
+    currentTaskId = data.task_id;
+    hide('searchResults');
+    document.getElementById('progressTitle').textContent = 'Downloading...';
+    show('progressSection');
+    document.getElementById('progressBar').style.width = '0%';
+    document.getElementById('progressPercent').textContent = '0%';
+    document.getElementById('progressStatus').textContent = 'Starting download...';
+    document.getElementById('cancelBtn').disabled = false;
+    listenProgress(currentTaskId);
+  } catch (err) {
+    showToast(err.message, 'error');
+    btn.disabled = false;
+    btn.innerHTML = origHTML;
+  }
+}
+
+// ── Helper: Read per-item state from dropdowns ───────────────────────
+function getItemStateFromDOM(item, index) {
+  const typeBtn = item.querySelector(`#item-type-dropdown-${index} .und-dropdown-button span`);
+  const qualityBtn = item.querySelector(`#item-quality-dropdown-${index} .und-dropdown-button span`);
+  const formatBtn = item.querySelector(`#item-format-dropdown-${index} .und-dropdown-button span`);
+
+  const mode = typeBtn?.textContent.toLowerCase().includes('audio') ? 'audio' : 'video';
+  const qualityLabel = qualityBtn?.textContent.trim() || '';
+  const formatLabel = formatBtn?.textContent.trim() || '';
+  const opts = FORMAT_OPTIONS[mode];
+  const quality = (opts.quality.find(o => o.label === qualityLabel) || opts.quality[0]).value;
+  const format = (opts.format.find(o => o.label === formatLabel) || opts.format[0]).value;
+
+  const result = {
+    url: item.dataset.url,
+    title: item.dataset.title,
+    thumbnail: item.dataset.thumb,
+    channel: item.dataset.channel,
+    mode,
+    quality,
+    format,
+    enableCut: false,
+    cutStart: '',
+    cutEnd: '',
+  };
+
+  const clipCheck = document.getElementById(`item-clip-check-${index}`);
+  if (clipCheck && clipCheck.checked) {
+    result.enableCut = true;
+    const startInput = document.getElementById(`item-cut-start-${index}`);
+    const endInput = document.getElementById(`item-cut-end-${index}`);
+    if (startInput) result.cutStart = startInput.value.trim();
+    if (endInput) result.cutEnd = endInput.value.trim();
+  }
+
+  return result;
+}
+
 // ── Event Delegation: Search List Checkbox & Select Changes ──────────
 function handleSearchListChange(e) {
   const target = e.target;
@@ -477,26 +637,7 @@ function handleSearchListChange(e) {
     const url = target.dataset.url;
     if (target.checked) {
       const index = Array.from(document.querySelectorAll('.search-item')).indexOf(item);
-      const typeBtn = item.querySelector(`#item-type-dropdown-${index} .und-dropdown-button span`);
-      const qualityBtn = item.querySelector(`#item-quality-dropdown-${index} .und-dropdown-button span`);
-      const formatBtn = item.querySelector(`#item-format-dropdown-${index} .und-dropdown-button span`);
-
-      const mode = typeBtn?.textContent.toLowerCase().includes('audio') ? 'audio' : 'video';
-      const qualityLabel = qualityBtn?.textContent.trim() || '';
-      const formatLabel = formatBtn?.textContent.trim() || '';
-      const opts = FORMAT_OPTIONS[mode];
-      const quality = (opts.quality.find(o => o.label === qualityLabel) || opts.quality[0]).value;
-      const format = (opts.format.find(o => o.label === formatLabel) || opts.format[0]).value;
-
-      selectedVideos.set(url, {
-        url,
-        title: item.dataset.title,
-        thumbnail: item.dataset.thumb,
-        channel: item.dataset.channel,
-        mode,
-        quality,
-        format,
-      });
+      selectedVideos.set(url, getItemStateFromDOM(item, index));
       item.classList.add('selected');
     } else {
       selectedVideos.delete(url);
@@ -518,26 +659,7 @@ function toggleSelectAll(e) {
       const url = cb.dataset.url;
       if (checked) {
         const index = Array.from(allItems).indexOf(item);
-        const typeBtn = item.querySelector(`#item-type-dropdown-${index} .und-dropdown-button span`);
-        const qualityBtn = item.querySelector(`#item-quality-dropdown-${index} .und-dropdown-button span`);
-        const formatBtn = item.querySelector(`#item-format-dropdown-${index} .und-dropdown-button span`);
-
-        const mode = typeBtn?.textContent.toLowerCase().includes('audio') ? 'audio' : 'video';
-        const qualityLabel = qualityBtn?.textContent.trim() || '';
-        const formatLabel = formatBtn?.textContent.trim() || '';
-        const opts = FORMAT_OPTIONS[mode];
-        const quality = (opts.quality.find(o => o.label === qualityLabel) || opts.quality[0]).value;
-        const format = (opts.format.find(o => o.label === formatLabel) || opts.format[0]).value;
-
-        selectedVideos.set(url, {
-          url,
-          title: item.dataset.title,
-          thumbnail: item.dataset.thumb,
-          channel: item.dataset.channel,
-          mode,
-          quality,
-          format,
-        });
+        selectedVideos.set(url, getItemStateFromDOM(item, index));
         item.classList.add('selected');
       } else {
         selectedVideos.delete(url);
@@ -581,7 +703,7 @@ async function fetchInfo(url) {
   btn.disabled = true;
   btnText.innerHTML = '<span class="spinner"></span> Fetching...';
 
-  hide('videoPreview'); hide('formatSection'); hide('progressSection');
+  hide('formatSection'); hide('progressSection');
   hide('completeSection'); hide('errorSection'); hide('cancelledSection');
   hide('batchProgressSection');
 
@@ -598,7 +720,6 @@ async function fetchInfo(url) {
     renderVideoPreview(data);
     setMode(currentMode);
     hide('searchResults');
-    show('videoPreview');
     show('formatSection');
   } catch (err) {
     showToast(err.message, 'error');
@@ -613,12 +734,11 @@ async function fetchInfo(url) {
 
 // ── Render Video Preview ─────────────────────────────────────────────
 function renderVideoPreview(info) {
-  const embedUrl = getYouTubeEmbedUrl(currentVideoUrl);
+  currentThumbnailUrl = info.thumbnail || '';
+  currentPreviewUrl = null;
   const thumbContainer = document.querySelector('.video-thumb');
-  if (embedUrl && thumbContainer) {
-    thumbContainer.innerHTML = `<iframe id="videoPlayerFrame" src="${embedUrl}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen style="width: 100%; height: 100%; aspect-ratio: 16/9; border-radius: 18px;"></iframe>`;
-  } else if (thumbContainer) {
-    thumbContainer.innerHTML = `<img id="videoThumb" src="${info.thumbnail || ''}" alt="Video thumbnail" style="width: 100%; height: 100%; object-fit: cover;">`;
+  if (thumbContainer) {
+    thumbContainer.innerHTML = `<img id="videoThumb" src="${escapeAttr(currentThumbnailUrl)}" alt="Video thumbnail">`;
   }
 
   document.getElementById('videoTitle').textContent = info.title || 'Unknown Title';
@@ -655,6 +775,61 @@ function renderVideoPreview(info) {
   if (collapseBtn) collapseBtn.classList.add('is-collapsed');
 
   updateCutSliders();
+}
+
+// ── Preview Player for Clip Mode ─────────────────────────────────────
+async function loadVideoPreviewPlayer() {
+  const thumbContainer = document.querySelector('.video-thumb');
+  if (!thumbContainer || !currentVideoUrl) return;
+
+  if (currentPreviewUrl) {
+    thumbContainer.innerHTML = `<video id="videoPreviewPlayer" src="${currentPreviewUrl}" controls playsinline preload="auto" style="width: 100%; height: 100%; object-fit: contain; background: #000; border-radius: var(--radius-large);"></video>`;
+    const videoEl = document.getElementById('videoPreviewPlayer');
+    if (videoEl) {
+      const startVal = parseFloat(document.getElementById('cutStartSlider')?.value) || 0;
+      videoEl.currentTime = startVal;
+    }
+    return;
+  }
+
+  thumbContainer.innerHTML = `
+    <img id="videoThumb" src="${escapeAttr(currentThumbnailUrl)}" alt="Video thumbnail" style="filter: brightness(0.35);">
+    <div class="video-thumb__loader">
+      <span class="spinner" style="width: 28px; height: 28px; border-width: 3px;"></span>
+      <span>Loading preview video on server...</span>
+    </div>
+  `;
+
+  try {
+    const res = await fetch(`${API}/api/preview`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: currentVideoUrl }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to download preview');
+
+    currentPreviewUrl = data.preview_url;
+    const enableCutCheckbox = document.getElementById('enableCutCheckbox');
+    if (enableCutCheckbox && enableCutCheckbox.checked) {
+      thumbContainer.innerHTML = `<video id="videoPreviewPlayer" src="${currentPreviewUrl}" controls playsinline preload="auto" style="width: 100%; height: 100%; object-fit: contain; background: #000; border-radius: var(--radius-large);"></video>`;
+      const videoEl = document.getElementById('videoPreviewPlayer');
+      if (videoEl) {
+        const startVal = parseFloat(document.getElementById('cutStartSlider')?.value) || 0;
+        videoEl.currentTime = startVal;
+      }
+    }
+  } catch (err) {
+    showToast('Could not load video preview: ' + err.message, 'info');
+    restoreVideoThumbnail();
+  }
+}
+
+function restoreVideoThumbnail() {
+  const thumbContainer = document.querySelector('.video-thumb');
+  if (thumbContainer) {
+    thumbContainer.innerHTML = `<img id="videoThumb" src="${escapeAttr(currentThumbnailUrl)}" alt="Video thumbnail">`;
+  }
 }
 
 // ── Mode Toggle ──────────────────────────────────────────────────────
@@ -727,7 +902,7 @@ async function startDownload() {
     if (!res.ok) throw new Error(data.error || 'Failed to start download');
 
     currentTaskId = data.task_id;
-    hide('formatSection'); hide('videoPreview');
+    hide('formatSection');
     document.getElementById('progressTitle').textContent = 'Downloading...';
     show('progressSection');
     document.getElementById('progressBar').style.width = '0%';
@@ -750,31 +925,72 @@ async function executeBatchDownload() {
   const items = Array.from(selectedVideos.values());
   hide('searchResults');
   hide('formatSection');
-  hide('videoPreview');
   show('batchProgressSection');
 
+  const overallStatus = document.getElementById('batchOverallStatus');
+  const saveAllBtn = document.getElementById('batchSaveAllBtn');
+  const newDownloadBtn = document.getElementById('batchNewDownloadBtn');
+  if (saveAllBtn) saveAllBtn.style.display = 'none';
+  if (newDownloadBtn) newDownloadBtn.style.display = 'none';
+  if (overallStatus) overallStatus.textContent = `Queued ${items.length} video${items.length === 1 ? '' : 's'}...`;
+
+  const completedTasks = [];
+
   const queue = document.getElementById('batchQueue');
-  queue.innerHTML = items.map((info, i) => `
+  queue.innerHTML = items.map((info, i) => {
+    const isAudio = info.mode === 'audio';
+    return `
     <div class="batch-item" id="batch-${i}" data-url="${escapeAttr(info.url)}">
-      <div class="batch-item__info">
-        <span class="batch-item__num">${i + 1}</span>
-        <div class="batch-item__text">
-          <div class="batch-item__title">${escapeHtml(info.title)}</div>
-          <div class="batch-item__fmt">${info.mode.toUpperCase()} · ${info.format.toUpperCase()} · ${info.quality}</div>
+      <div class="batch-item__main">
+        <div class="batch-item__left">
+          <span class="batch-item__num">${i + 1}</span>
+          <div class="batch-item__thumb">
+            <img src="${escapeAttr(info.thumbnail || '')}" alt="${escapeHtml(info.title)}" onerror="this.style.display='none'">
+            <div class="batch-item__type-badge">
+              ${isAudio 
+                ? `<svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg>` 
+                : `<svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg>`
+              }
+            </div>
+          </div>
+          <div class="batch-item__text">
+            <div class="batch-item__title" title="${escapeHtml(info.title)}">${escapeHtml(info.title)}</div>
+            <div class="batch-item__meta-tags">
+              <span class="batch-item__badge batch-item__badge--mode">${info.mode.toUpperCase()}</span>
+              <span class="batch-item__badge">${info.format.toUpperCase()}</span>
+              <span class="batch-item__badge">${info.quality === 'best' ? 'Best Quality' : (isAudio ? info.quality + ' kbps' : info.quality + 'p')}</span>
+              ${info.enableCut ? `<span class="batch-item__badge batch-item__badge--clip">✂ ${escapeHtml(info.cutStart || '0')} – ${escapeHtml(info.cutEnd || 'End')}</span>` : ''}
+            </div>
+          </div>
+        </div>
+        <div class="batch-item__actions-right">
+          <div class="batch-item__status pending" id="batch-status-${i}">
+            <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width: 14px; height: 14px;"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+            <span>Queued</span>
+          </div>
+          <button class="btn btn--success btn--sm batch-item__save-btn" id="batch-save-${i}" style="display: none; align-items: center; gap: 6px;" type="button">
+            <svg class="svg-icon svg-icon--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+            <span>Save</span>
+          </button>
         </div>
       </div>
-      <div class="batch-item__status" id="batch-status-${i}">⏳ Queued</div>
       <div class="batch-item__details" id="batch-details-${i}" style="display: none;"></div>
     </div>
-  `).join('');
+  `}).join('');
 
   // Download sequentially each with its custom format & quality settings
   for (let i = 0; i < items.length; i++) {
     const info = items[i];
     const statusEl = document.getElementById(`batch-status-${i}`);
     const itemEl = document.getElementById(`batch-${i}`);
+    const saveBtn = document.getElementById(`batch-save-${i}`);
 
-    statusEl.textContent = '📥 Downloading...';
+    if (overallStatus) overallStatus.textContent = `Downloading ${i + 1} of ${items.length}...`;
+
+    statusEl.innerHTML = `
+      <span class="spinner" style="width: 12px; height: 12px; border-width: 2px;"></span>
+      <span>Downloading...</span>
+    `;
     statusEl.className = 'batch-item__status downloading';
     itemEl.classList.add('active');
 
@@ -801,7 +1017,7 @@ async function executeBatchDownload() {
       // Show details and inject progress UI
       const detailsEl = document.getElementById(`batch-details-${i}`);
       detailsEl.innerHTML = `
-        <div class="batch-item__progress-bar-wrapper" style="margin-top: 8px;">
+        <div class="batch-item__progress-bar-wrapper" style="margin-top: 6px;">
           <div class="batch-item__progress">
             <div class="batch-item__progress-bar" id="batch-progress-bar-${i}" style="width: 0%;"></div>
           </div>
@@ -818,8 +1034,8 @@ async function executeBatchDownload() {
               <span id="batch-eta-${i}">—</span>
             </span>
           </div>
-          <button class="btn btn--danger batch-cancel-btn" id="batch-cancel-${i}" style="padding: 8px 18px; font-size: 0.88rem; font-weight: 600; border-radius: var(--radius-small); display: inline-flex; align-items: center; gap: 6px; box-shadow: var(--neo-raised-sm); flex-shrink: 0;">
-            <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width: 16px; height: 16px;"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          <button class="btn btn--danger batch-cancel-btn" id="batch-cancel-${i}" style="padding: 6px 14px; font-size: 0.82rem; font-weight: 600; border-radius: var(--radius-small); display: inline-flex; align-items: center; gap: 6px; box-shadow: var(--neo-raised-sm); flex-shrink: 0;">
+            <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px;"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
             Cancel
           </button>
         </div>
@@ -859,7 +1075,10 @@ async function executeBatchDownload() {
           if (progressBar) progressBar.style.width = '100%';
           if (percentEl) percentEl.textContent = '100%';
           if (currentStatusEl) {
-            currentStatusEl.textContent = progressData.message || 'Processing...';
+            currentStatusEl.innerHTML = `
+              <span class="spinner" style="width: 12px; height: 12px; border-width: 2px;"></span>
+              <span>${progressData.message || 'Processing...'}</span>
+            `;
             currentStatusEl.className = 'batch-item__status downloading';
           }
           const cancelBtnEl = document.getElementById(`batch-cancel-${i}`);
@@ -871,18 +1090,40 @@ async function executeBatchDownload() {
       detailsEl.style.display = 'none';
 
       if (finalInfo.status === 'done') {
-        statusEl.textContent = '✅ Done';
+        statusEl.innerHTML = `
+          <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2.5" style="width: 14px; height: 14px;"><polyline points="20 6 9 17 4 12"></polyline></svg>
+          <span>Done</span>
+        `;
         statusEl.className = 'batch-item__status completed';
-        window.open(`${API}/api/file/${data.task_id}`, '_blank');
+        
+        // Show individual Save button
+        if (saveBtn) {
+          saveBtn.style.display = 'inline-flex';
+          saveBtn.onclick = () => {
+            window.open(`${API}/api/file/${data.task_id}`, '_blank');
+          };
+        }
+
+        completedTasks.push({ taskId: data.task_id, title: info.title });
+        if (saveAllBtn) saveAllBtn.style.display = 'inline-flex';
       } else if (finalInfo.status === 'cancelled') {
-        statusEl.textContent = '❌ Cancelled';
+        statusEl.innerHTML = `
+          <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width: 14px; height: 14px;"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          <span>Cancelled</span>
+        `;
         statusEl.className = 'batch-item__status failed';
       } else {
-        statusEl.textContent = '❌ Failed';
+        statusEl.innerHTML = `
+          <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width: 14px; height: 14px;"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
+          <span>Failed</span>
+        `;
         statusEl.className = 'batch-item__status failed';
       }
     } catch (err) {
-      statusEl.textContent = '❌ Failed';
+      statusEl.innerHTML = `
+        <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width: 14px; height: 14px;"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
+        <span>Failed</span>
+      `;
       statusEl.className = 'batch-item__status failed';
       const detailsEl = document.getElementById(`batch-details-${i}`);
       if (detailsEl) detailsEl.style.display = 'none';
@@ -890,7 +1131,26 @@ async function executeBatchDownload() {
     itemEl.classList.remove('active');
   }
 
-  showToast(`Batch download complete (${items.length} videos)`, 'success');
+  if (overallStatus) {
+    overallStatus.textContent = `Completed ${completedTasks.length} of ${items.length} downloads`;
+  }
+  if (newDownloadBtn) {
+    newDownloadBtn.style.display = 'inline-flex';
+    newDownloadBtn.onclick = resetUI;
+  }
+  if (saveAllBtn && completedTasks.length > 0) {
+    saveAllBtn.style.display = 'inline-flex';
+    saveAllBtn.onclick = () => {
+      completedTasks.forEach((t, idx) => {
+        setTimeout(() => {
+          window.open(`${API}/api/file/${t.taskId}`, '_blank');
+        }, idx * 400);
+      });
+      showToast(`Downloading all ${completedTasks.length} files...`, 'info');
+    };
+  }
+
+  showToast(`Batch download complete (${completedTasks.length}/${items.length} saved)`, 'success');
   selectedVideos.clear();
   updateBatchBar();
   loadHistory();
@@ -995,6 +1255,8 @@ function resetUI() {
   hideAll();
   currentVideoUrl = '';
   currentTaskId = null;
+  currentPreviewUrl = null;
+  currentThumbnailUrl = '';
   selectedVideos.clear();
   updateBatchBar();
   if (eventSource) { eventSource.close(); eventSource = null; }
@@ -1024,6 +1286,10 @@ function resetUI() {
   if (thumbContainer) {
     thumbContainer.innerHTML = `<img id="videoThumb" src="" alt="Video thumbnail">`;
   }
+  const saveAllBtn = document.getElementById('batchSaveAllBtn');
+  const newDownloadBtn = document.getElementById('batchNewDownloadBtn');
+  if (saveAllBtn) saveAllBtn.style.display = 'none';
+  if (newDownloadBtn) newDownloadBtn.style.display = 'none';
   loadHistory();
 }
 
@@ -1097,7 +1363,7 @@ function showToast(message, type = 'info') {
 function show(id) { document.getElementById(id).classList.add('show'); }
 function hide(id) { document.getElementById(id).classList.remove('show'); }
 function hideAll() {
-  ['searchResults', 'videoPreview', 'formatSection', 'progressSection',
+  ['searchResults', 'formatSection', 'progressSection',
    'completeSection', 'errorSection', 'cancelledSection', 'batchProgressSection']
     .forEach(hide);
 }
@@ -1281,6 +1547,10 @@ function stepTime(field, deltaSeconds) {
     endSlider.value = newEnd;
   }
   updateCutSliders();
+  const videoEl = document.getElementById('videoPreviewPlayer');
+  if (videoEl && !isNaN(videoEl.duration)) {
+    videoEl.currentTime = (field === 'start' ? parseFloat(startSlider.value) : parseFloat(endSlider.value)) || 0;
+  }
 }
 
 function handleStartSliderInput() {
@@ -1291,6 +1561,10 @@ function handleStartSliderInput() {
     startSlider.value = endSlider.value;
   }
   updateCutSliders();
+  const videoEl = document.getElementById('videoPreviewPlayer');
+  if (videoEl && !isNaN(videoEl.duration)) {
+    videoEl.currentTime = parseFloat(startSlider.value) || 0;
+  }
 }
 
 function handleEndSliderInput() {
@@ -1301,6 +1575,10 @@ function handleEndSliderInput() {
     endSlider.value = startSlider.value;
   }
   updateCutSliders();
+  const videoEl = document.getElementById('videoPreviewPlayer');
+  if (videoEl && !isNaN(videoEl.duration)) {
+    videoEl.currentTime = parseFloat(endSlider.value) || 0;
+  }
 }
 
 function handleTimeInputChange() {

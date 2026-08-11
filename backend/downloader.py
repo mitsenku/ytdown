@@ -522,3 +522,55 @@ def _clean_error(msg: str) -> str:
         return "Download blocked for security reasons."
     # Generic — never expose raw exception text
     return "Download failed. Please try again with a different URL or format."
+
+
+def download_preview(url: str, output_dir: str) -> str:
+    """
+    Download a low-quality (360p worst) MP4 preview for clip trimming.
+    Returns the filepath of the downloaded preview, or raises on error.
+    """
+    if not validate_url(url):
+        raise ValueError("Invalid or disallowed URL")
+
+    os.makedirs(output_dir, exist_ok=True)
+
+    # Create a deterministic filename based on video URL hash
+    import hashlib
+    url_hash = hashlib.md5(url.encode()).hexdigest()
+
+    # Check if preview already exists
+    for f in os.listdir(output_dir):
+        if f.startswith(url_hash) and not f.endswith(".part") and not f.endswith(".ytdl"):
+            existing = os.path.join(output_dir, f)
+            if os.path.isfile(existing) and os.path.getsize(existing) > 0:
+                return existing
+
+    outtmpl = os.path.join(output_dir, f"{url_hash}.%(ext)s")
+
+    ffmpeg_available = _has_ffmpeg()
+
+    opts = {
+        **_secure_base_opts(),
+        "outtmpl": outtmpl,
+        "quiet": True,
+        "no_warnings": True,
+    }
+
+    if ffmpeg_available:
+        opts["format"] = "bestvideo[height<=360]+bestaudio/best[height<=360]/worst"
+        opts["merge_output_format"] = "mp4"
+    else:
+        opts["format"] = "best[height<=360]/worst"
+
+    with yt_dlp.YoutubeDL(opts) as ydl:
+        ydl.download([url])
+
+    # Find the generated file
+    for f in os.listdir(output_dir):
+        if f.startswith(url_hash) and not f.endswith(".part") and not f.endswith(".ytdl"):
+            filepath = os.path.join(output_dir, f)
+            if os.path.isfile(filepath) and os.path.getsize(filepath) > 0:
+                return filepath
+
+    raise Exception("Preview download completed but file not found")
+
