@@ -196,11 +196,12 @@ def index():
 
 @app.route("/<path:path>")
 def static_files(path):
-    # Prevent directory traversal — only serve files within FRONTEND_DIR
-    safe_path = os.path.normpath(os.path.join(FRONTEND_DIR, path))
-    if not safe_path.startswith(FRONTEND_DIR):
+    # Prevent directory traversal - only serve files within FRONTEND_DIR
+    safe_path = os.path.normpath(os.path.realpath(os.path.join(FRONTEND_DIR, path)))
+    real_frontend_dir = os.path.normpath(os.path.realpath(FRONTEND_DIR))
+    if os.path.commonpath([safe_path, real_frontend_dir]) != real_frontend_dir:
         return jsonify({"error": "Forbidden"}), 403
-    return send_from_directory(FRONTEND_DIR, path)
+    return send_file(safe_path)
 
 
 # ── API: Search YouTube ──────────────────────────────────────────────
@@ -242,9 +243,9 @@ def api_info():
     if not url:
         return jsonify({"error": "URL is required"}), 400
 
-    # Validate URL is a YouTube URL
+    # Validate URL
     if not validate_url(url):
-        return jsonify({"error": "Only YouTube URLs are allowed"}), 400
+        return jsonify({"error": "Invalid or disallowed URL"}), 400
 
     try:
         info = extract_info(url)
@@ -308,7 +309,7 @@ def api_download():
 
     # Validate URL
     if not validate_url(url):
-        return jsonify({"error": "Only YouTube URLs are allowed"}), 400
+        return jsonify({"error": "Invalid or disallowed URL"}), 400
 
     # Validate mode
     if mode not in ALLOWED_MODES:
@@ -435,7 +436,7 @@ def api_file(task_id):
     # Path traversal protection: ensure file is within DOWNLOAD_DIR
     real_filepath = os.path.normpath(os.path.realpath(filepath))
     real_download_dir = os.path.normpath(os.path.realpath(DOWNLOAD_DIR))
-    if not real_filepath.startswith(real_download_dir):
+    if os.path.commonpath([real_filepath, real_download_dir]) != real_download_dir:
         return jsonify({"error": "Access denied"}), 403
 
     if not os.path.isfile(real_filepath):
@@ -471,7 +472,7 @@ def api_preview():
         return jsonify({"error": "URL is required"}), 400
 
     if not validate_url(url):
-        return jsonify({"error": "Only YouTube URLs are allowed"}), 400
+        return jsonify({"error": "Invalid or disallowed URL"}), 400
 
     try:
         filepath = download_preview(url, PREVIEW_DIR)
@@ -483,13 +484,13 @@ def api_preview():
 
 @app.route("/api/preview/<filename>")
 def api_serve_preview(filename):
-    # Only allow safe filenames (hash + extension)
-    if not re.match(r"^[a-f0-9]{32}\.[a-z0-9]{2,5}$", filename):
+    # Only allow safe filenames (hash + extension(s))
+    if not re.match(r"^[a-f0-9]{32}(?:\.[a-z0-9]+)+$", filename):
         return jsonify({"error": "Invalid filename"}), 400
 
     safe_path = os.path.normpath(os.path.join(PREVIEW_DIR, filename))
     real_preview_dir = os.path.normpath(os.path.realpath(PREVIEW_DIR))
-    if not os.path.normpath(os.path.realpath(safe_path)).startswith(real_preview_dir):
+    if os.path.commonpath([os.path.normpath(os.path.realpath(safe_path)), real_preview_dir]) != real_preview_dir:
         return jsonify({"error": "Access denied"}), 403
 
     if not os.path.isfile(safe_path):

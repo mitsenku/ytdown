@@ -26,14 +26,7 @@ import yt_dlp
 
 # ── URL Validation ────────────────────────────────────────────────────
 # Only allow YouTube domains — prevent SSRF to internal services
-ALLOWED_DOMAINS = {
-    "youtube.com",
-    "www.youtube.com",
-    "m.youtube.com",
-    "music.youtube.com",
-    "youtu.be",
-    "www.youtu.be",
-}
+# We allow all domains now, so no ALLOWED_DOMAINS needed.
 
 
 def validate_url(url: str) -> bool:
@@ -66,17 +59,15 @@ def validate_url(url: str) -> bool:
         return False
 
     # Block IP addresses (prevent SSRF to internal services)
-    if re.match(r"^\d{1,3}(\.\d{1,3}){3}$", hostname):
-        return False
-    if hostname in ("localhost", "127.0.0.1", "0.0.0.0", "::1"):
-        return False
+    import socket
+    try:
+        ip = socket.gethostbyname(hostname)
+        if ip.startswith("127.") or ip.startswith("10.") or ip.startswith("192.168.") or ip.startswith("172.") or ip == "0.0.0.0":
+            return False
+    except Exception:
+        pass
 
-    # Must be an allowed YouTube domain
-    if hostname not in ALLOWED_DOMAINS:
-        return False
-
-    # Must have a valid path (not empty for youtu.be)
-    if hostname == "youtu.be" and not parsed.path.strip("/"):
+    if hostname in ("localhost", "127.0.0.1", "0.0.0.0", "::1") or hostname.endswith(".local"):
         return False
 
     return True
@@ -439,7 +430,7 @@ def start_download(
             if filename:
                 real_file = os.path.normpath(os.path.realpath(filename))
                 real_outdir = os.path.normpath(os.path.realpath(output_dir))
-                if not real_file.startswith(real_outdir):
+                if os.path.commonpath([real_file, real_outdir]) != real_outdir:
                     # Path traversal detected — delete and error
                     try:
                         os.remove(real_file)
@@ -490,7 +481,7 @@ def _cleanup_partial_files(output_dir: str, task_id: str):
             if f.startswith(task_id):
                 filepath = os.path.join(real_outdir, f)
                 # Double-check it's still within the directory
-                if os.path.normpath(os.path.realpath(filepath)).startswith(real_outdir):
+                if os.path.commonpath([os.path.normpath(os.path.realpath(filepath)), real_outdir]) == real_outdir:
                     try:
                         os.remove(filepath)
                     except OSError:

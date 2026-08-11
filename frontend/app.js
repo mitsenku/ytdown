@@ -103,37 +103,21 @@ document.addEventListener('DOMContentLoaded', () => {
   searchList.addEventListener('click', handleSearchListClick);
   searchList.addEventListener('change', handleSearchListChange);
 
-  // Duration clipping toggle switch & collapse handlers
+  // Duration clipping toggle switch
   const enableCutCheckbox = document.getElementById('enableCutCheckbox');
   const cutInputsContainer = document.getElementById('cutInputsContainer');
-  const clipCollapseBtn = document.getElementById('clipCollapseBtn');
-
+  
   if (enableCutCheckbox && cutInputsContainer) {
-    enableCutCheckbox.addEventListener('change', (e) => {
-      if (e.target.checked) {
-        cutInputsContainer.classList.remove('is-hidden');
-        if (clipCollapseBtn) clipCollapseBtn.classList.remove('is-collapsed');
-        updateCutSliders();
-        loadVideoPreviewPlayer();
-      } else {
-        cutInputsContainer.classList.add('is-hidden');
-        if (clipCollapseBtn) clipCollapseBtn.classList.add('is-collapsed');
-        restoreVideoThumbnail();
-      }
-    });
-  }
+    // Initial state
+    cutInputsContainer.style.display = enableCutCheckbox.checked ? 'block' : 'none';
 
-  if (clipCollapseBtn && enableCutCheckbox && cutInputsContainer) {
-    clipCollapseBtn.addEventListener('click', () => {
-      if (!enableCutCheckbox.checked) {
-        enableCutCheckbox.checked = true;
-        cutInputsContainer.classList.remove('is-hidden');
-        clipCollapseBtn.classList.remove('is-collapsed');
+    enableCutCheckbox.addEventListener('change', (e) => {
+      cutInputsContainer.style.display = e.target.checked ? 'block' : 'none';
+      if (e.target.checked) {
         updateCutSliders();
         loadVideoPreviewPlayer();
       } else {
-        const isCurrentlyHidden = cutInputsContainer.classList.toggle('is-hidden');
-        clipCollapseBtn.classList.toggle('is-collapsed', isCurrentlyHidden);
+        restoreVideoThumbnail();
       }
     });
   }
@@ -149,6 +133,31 @@ document.addEventListener('DOMContentLoaded', () => {
     endSlider.addEventListener('mousedown', () => { endSlider.style.zIndex = '10'; startSlider.style.zIndex = '9'; });
     endSlider.addEventListener('touchstart', () => { endSlider.style.zIndex = '10'; startSlider.style.zIndex = '9'; });
   }
+
+  // Spacebar to play/pause preview video without scrolling down
+  window.addEventListener('keydown', (e) => {
+    if (e.code === 'Space') {
+      // Don't intercept if user is typing in a text input
+      if (e.target.tagName === 'INPUT' && e.target.type === 'text') return;
+      
+      let video = null;
+      // Target the video in the active search result if applicable
+      const searchItem = e.target.closest('.search-item');
+      if (searchItem) {
+        video = searchItem.querySelector('video');
+      }
+      
+      if (!video) {
+        video = document.getElementById('videoPreviewPlayer');
+      }
+
+      if (video) {
+        e.preventDefault();
+        if (video.paused) video.play();
+        else video.pause();
+      }
+    }
+  });
 
   // Sync manual input changes back to range sliders
   const startInput = document.getElementById('cutStartInput');
@@ -564,9 +573,10 @@ async function directDownloadFromSearch(url, btn) {
   const qualityBtn = item.querySelector(`#item-quality-dropdown-${index} .und-dropdown-button span`);
   const formatBtn = item.querySelector(`#item-format-dropdown-${index} .und-dropdown-button span`);
 
-  const mode = typeBtn?.textContent.toLowerCase().includes('audio') ? 'audio' : 'video';
-  const qualityLabel = qualityBtn?.textContent.trim() || '';
-  const formatLabel = formatBtn?.textContent.trim() || '';
+  const typeText = typeBtn?.textContent || '';
+  const mode = typeText.toLowerCase().includes('audio') ? 'audio' : 'video';
+  const qualityLabel = qualityBtn?.textContent?.trim() || '';
+  const formatLabel = formatBtn?.textContent?.trim() || '';
   const opts = FORMAT_OPTIONS[mode];
   const quality = (opts.quality.find(o => o.label === qualityLabel) || opts.quality[0]).value;
   const format = (opts.format.find(o => o.label === formatLabel) || opts.format[0]).value;
@@ -619,9 +629,10 @@ function getItemStateFromDOM(item, index) {
   const qualityBtn = item.querySelector(`#item-quality-dropdown-${index} .und-dropdown-button span`);
   const formatBtn = item.querySelector(`#item-format-dropdown-${index} .und-dropdown-button span`);
 
-  const mode = typeBtn?.textContent.toLowerCase().includes('audio') ? 'audio' : 'video';
-  const qualityLabel = qualityBtn?.textContent.trim() || '';
-  const formatLabel = formatBtn?.textContent.trim() || '';
+  const typeText = typeBtn?.textContent || '';
+  const mode = typeText.toLowerCase().includes('audio') ? 'audio' : 'video';
+  const qualityLabel = qualityBtn?.textContent?.trim() || '';
+  const formatLabel = formatBtn?.textContent?.trim() || '';
   const opts = FORMAT_OPTIONS[mode];
   const quality = (opts.quality.find(o => o.label === qualityLabel) || opts.quality[0]).value;
   const format = (opts.format.find(o => o.label === formatLabel) || opts.format[0]).value;
@@ -1001,25 +1012,21 @@ async function executeBatchDownload() {
     const isAudio = info.mode === 'audio';
     return `<div class="batch-item" id="batch-${i}" data-url="${escapeAttr(info.url)}">
       <div class="batch-item__main">
-        <div style="display: flex; gap: 16px; align-items: flex-start; width: 100%;">
+        <div style="display: flex; gap: 16px; align-items: center; width: 100%;">
           <span class="batch-item__num">${i + 1}</span>
-          <div class="batch-item__text" style="flex: 1; min-width: 0;">
-            <div class="batch-item__title" title="${escapeHtml(info.title)}" style="font-size: 1.05rem; font-weight: 700; color: var(--text-primary); margin-bottom: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(info.title)}</div>
-            <div class="batch-item__meta-text" style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 12px; font-weight: 500; letter-spacing: 0.3px;">
-              ${info.mode.toUpperCase()} &bull; ${info.format.toUpperCase()} &bull; ${info.quality === 'best' ? 'best' : (isAudio ? info.quality + ' kbps' : info.quality + 'p')}
-              ${info.enableCut ? ` &bull; ✂ ${escapeHtml(info.cutStart || '0')} &ndash; ${escapeHtml(info.cutEnd || 'End')}` : ''}
-            </div>
-            <div class="batch-item__status pending" id="batch-status-${i}" style="display: flex; align-items: center; gap: 6px; font-size: 0.9rem; font-weight: 600; color: var(--text-secondary);">
-              <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2.5" style="width: 16px; height: 16px;"><path d="M12 2v20"></path><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
-              <span style="color: var(--text-primary);">Queued</span>
+          <div class="batch-item__text" style="flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center;">
+            <div class="batch-item__title" title="${escapeHtml(info.title)}" style="font-size: 1.05rem; font-weight: 700; color: var(--text-primary); margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(info.title)}</div>
+            <div class="batch-item__meta-text" style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0; font-weight: 500; letter-spacing: 0.3px; display: flex; align-items: center; gap: 8px;">
+              <span>${info.mode.toUpperCase()} &bull; ${info.format.toUpperCase()} &bull; ${info.quality === 'best' ? 'best' : (isAudio ? info.quality + ' kbps' : info.quality + 'p')}</span>
+              ${info.enableCut ? `<span>&bull; ✂ ${escapeHtml(info.cutStart || '0')} &ndash; ${escapeHtml(info.cutEnd || 'End')}</span>` : ''}
             </div>
           </div>
-          <button class="batch-item__menu-btn" style="background: var(--surface-secondary); border: 1px solid var(--glass-border); border-radius: 8px; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--text-secondary); box-shadow: var(--neo-raised-sm); flex-shrink: 0;">
-            <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width: 18px; height: 18px;"><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg>
-          </button>
-          <button class="btn btn--success btn--sm batch-item__save-btn" id="batch-save-${i}" style="display: none; align-items: center; gap: 6px; position: absolute; right: 24px; bottom: 24px;" type="button">
-            <svg class="svg-icon svg-icon--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
-            <span>Save</span>
+          <div class="batch-item__status pending" id="batch-status-${i}" style="display: flex; align-items: center; gap: 6px; font-size: 0.9rem; font-weight: 600; color: var(--text-secondary); background: var(--surface-tertiary); padding: 6px 12px; border-radius: 99px;">
+            <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2.5" style="width: 16px; height: 16px;"><path d="M12 2v20"></path><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+            <span style="color: var(--text-primary);">Queued</span>
+          </div>
+          <button class="batch-item__menu-btn" style="background: transparent; border: none; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--text-secondary); flex-shrink: 0; transition: color 150ms ease;">
+            <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width: 20px; height: 20px;"><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg>
           </button>
         </div>
       </div>
@@ -1032,7 +1039,6 @@ async function executeBatchDownload() {
     const info = items[i];
     const statusEl = document.getElementById(`batch-status-${i}`);
     const itemEl = document.getElementById(`batch-${i}`);
-    const saveBtn = document.getElementById(`batch-save-${i}`);
 
     if (overallStatus) overallStatus.textContent = `Downloading ${i + 1} of ${items.length}...`;
 
@@ -1163,17 +1169,10 @@ async function executeBatchDownload() {
 
       if (finalInfo.status === 'done') {
         statusEl.innerHTML = `
-          <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2.5" style="width: 14px; height: 14px;"><polyline points="20 6 9 17 4 12"></polyline></svg>
-          <span>Done</span>
+          <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2.5" style="width:16px;height:16px;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+          <span style="color: #10b981;">Done</span>
         `;
         statusEl.className = 'batch-item__status completed';
-        
-        if (saveBtn) {
-          saveBtn.style.display = 'inline-flex';
-          saveBtn.onclick = () => {
-            window.open(`${API}/api/file/${data.task_id}`, '_blank');
-          };
-        }
         itemEl.classList.add('completed-item');
 
         completedTasks.push({ taskId: data.task_id, title: info.title });
