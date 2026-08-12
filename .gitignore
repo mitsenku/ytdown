@@ -6,3 +6,6 @@ previews/
 venv/
 *.pyc
 .env
+cookies.txt
+*.cookies
+cloudflared*
