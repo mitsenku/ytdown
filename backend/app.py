@@ -52,8 +52,12 @@ except Exception:
 app = Flask(__name__, static_folder=FRONTEND_DIR, static_url_path="")
 app.config["MAX_CONTENT_LENGTH"] = 1 * 1024 * 1024  # 1 MB max request body
 
-# Restrict CORS to same-origin only (no wildcard)
-CORS(app, origins=["http://localhost:5000", "http://127.0.0.1:5000"])
+# CORS: configurable via environment variable (defaults to allow all origins)
+_cors_origins = os.environ.get("CORS_ORIGINS", "*")
+if _cors_origins == "*":
+    CORS(app, origins="*")
+else:
+    CORS(app, origins=[o.strip() for o in _cors_origins.split(",") if o.strip()])
 
 # ── Allowed values (strict allowlists) ───────────────────────────────
 ALLOWED_MODES = {"video", "audio"}
@@ -518,5 +522,7 @@ def server_error(e):
 # ── Run ───────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     start_cleanup_thread()
-    print("\n  [*] YT-DLP Web Interface running at http://localhost:5000\n")
-    app.run(host="0.0.0.0", port=5000, debug=False, threaded=True)
+    port = int(os.environ.get("PORT", 8939))
+    host = os.environ.get("HOST", "0.0.0.0")
+    print(f"\n  [*] YT-DLP Web Interface running at http://{host}:{port}\n")
+    app.run(host=host, port=port, debug=False, threaded=True)

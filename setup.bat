@@ -63,14 +63,14 @@ if not exist "downloads" mkdir downloads
 :: Launch server
 echo.
 echo  ============================================
-echo    Starting server at http://localhost:5000
+echo    Starting server at http://localhost:8939
 echo  ============================================
 echo.
 echo  Press Ctrl+C to stop the server.
 echo.
 
 :: Open browser after a short delay
-start "" /b cmd /c "timeout /t 2 /nobreak >nul & start http://localhost:5000"
+start "" /b cmd /c "timeout /t 2 /nobreak >nul & start http://localhost:8939"
 
 :: Start Flask
 cd backend
