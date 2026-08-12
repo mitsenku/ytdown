@@ -157,6 +157,12 @@ def _secure_base_opts() -> dict:
                 "player_skip": ["configs", "webpage"],
             }
         },
+        # JavaScript runtimes for solving YouTube signature & n-parameter challenges
+        "js_runtimes": {
+            "node": {},
+            "deno": {},
+            "quickjs": {},
+        },
         "http_headers": {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
             "Accept-Language": "en-US,en;q=0.9",
