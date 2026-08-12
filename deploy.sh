@@ -131,7 +131,7 @@ Group=${SERVICE_GROUP}
 WorkingDirectory=${BACKEND_DIR}
 Environment="PATH=${VENV_DIR}/bin:/usr/local/bin:/usr/bin:/bin"
 Environment="PORT=${PORT}"
-Environment="HOST=0.0.0.0"
+Environment="HOST=::"
 Environment="CORS_ORIGINS=*"
 Environment="PYTHONUNBUFFERED=1"
 
@@ -172,7 +172,8 @@ else
     exit 1
 fi
 
-SERVER_IP="$(hostname -I 2>/dev/null | awk '{print $1}' || echo "YOUR_SERVER_IP")"
+SERVER_IPV4="$(hostname -I 2>/dev/null | awk '{print $1}' || echo "YOUR_IPV4")"
+SERVER_IPV6="$(ip -6 addr show scope global 2>/dev/null | grep inet6 | awk '{print $2}' | cut -d/ -f1 | head -n1 || echo "")"
 
 echo ""
 echo -e "${CYAN}  ╔══════════════════════════════════════════════════╗"
@@ -180,8 +181,13 @@ echo -e "  ║          🎉 Deployment Successful!              ║"
 echo -e "  ╚══════════════════════════════════════════════════╝${NC}"
 echo ""
 echo -e "  ${GREEN}Access URLs:${NC}"
-echo -e "    Local  : ${BOLD}http://localhost:${PORT}${NC}"
-echo -e "    Network: ${BOLD}http://${SERVER_IP}:${PORT}${NC}"
+echo -e "    Local : ${BOLD}http://localhost:${PORT}${NC}"
+if [ -n "$SERVER_IPV4" ]; then
+echo -e "    IPv4  : ${BOLD}http://${SERVER_IPV4}:${PORT}${NC}"
+fi
+if [ -n "$SERVER_IPV6" ]; then
+echo -e "    IPv6  : ${BOLD}http://[${SERVER_IPV6}]:${PORT}${NC}"
+fi
 echo ""
 echo -e "  ${YELLOW}Systemd Management Commands:${NC}"
 echo -e "    sudo systemctl status ${APP_NAME}     # View service status"

@@ -523,6 +523,10 @@ def server_error(e):
 if __name__ == "__main__":
     start_cleanup_thread()
     port = int(os.environ.get("PORT", 8939))
-    host = os.environ.get("HOST", "0.0.0.0")
-    print(f"\n  [*] YT-DLP Web Interface running at http://{host}:{port}\n")
-    app.run(host=host, port=port, debug=False, threaded=True)
+    host = os.environ.get("HOST", "::")
+    print(f"\n  [*] YT-DLP Web Interface running on port {port} (IPv4 + IPv6)\n")
+    try:
+        app.run(host=host, port=port, debug=False, threaded=True)
+    except Exception:
+        # Fallback to 0.0.0.0 if :: dual-stack binding is not permitted
+        app.run(host="0.0.0.0", port=port, debug=False, threaded=True)
