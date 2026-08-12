@@ -145,11 +145,11 @@ def _secure_base_opts() -> dict:
         "writesubtitles": False,
         # Do not set file modification time to video upload date (prevents instant cleanup deletion)
         "updatetime": False,
-        # VPS Datacenter BotGuard Bypass:
-        # Use mobile/app client extractors to bypass the web sign-in challenge on datacenter IPs
+        # VPS Datacenter BotGuard Bypass (Zero-Cookie Operation):
+        # android_vr and android clients allow searches and downloads without sign-in or cookies on VPS datacenter IPs
         "extractor_args": {
             "youtube": {
-                "player_client": ["android", "ios", "mweb", "web"],
+                "player_client": ["android_vr", "android", "ios", "mweb", "web"],
                 "player_skip": ["configs", "webpage"],
             }
         },
