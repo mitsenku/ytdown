@@ -95,19 +95,20 @@ kill_port() {
 kill_port "${PORT}"
 
 # ── 3. Install System Packages ────────────────────────────────────────
-echo -e "${YELLOW}[2/5] Installing system packages (python3, ffmpeg, tools)...${NC}"
+echo -e "${YELLOW}[2/5] Installing system packages (python3, ffmpeg, nodejs, tools)...${NC}"
 apt-get update -qq
-apt-get install -y -qq python3 python3-pip python3-venv ffmpeg curl psmisc lsof > /dev/null 2>&1
+apt-get install -y -qq python3 python3-pip python3-venv ffmpeg curl psmisc lsof nodejs > /dev/null 2>&1 || apt-get install -y -qq python3 python3-pip python3-venv ffmpeg curl psmisc lsof > /dev/null 2>&1
 echo -e "${GREEN}  ✓ System packages verified & installed${NC}"
 
 # ── 4. Setup Python Virtual Environment ───────────────────────────────
-echo -e "${YELLOW}[3/5] Setting up Python virtual environment...${NC}"
+echo -e "${YELLOW}[3/5] Setting up Python virtual environment & updating yt-dlp...${NC}"
 if [ ! -d "$VENV_DIR" ]; then
     python3 -m venv "$VENV_DIR"
 fi
 "${VENV_DIR}/bin/pip" install --upgrade pip -q
 "${VENV_DIR}/bin/pip" install -r "${BACKEND_DIR}/requirements.txt" -q
-echo -e "${GREEN}  ✓ Python virtualenv and dependencies installed at ${VENV_DIR}${NC}"
+"${VENV_DIR}/bin/pip" install --upgrade yt-dlp -q
+echo -e "${GREEN}  ✓ Python virtualenv and dependencies (yt-dlp latest) ready at ${VENV_DIR}${NC}"
 
 # ── 5. Create Directories and Permissions ─────────────────────────────
 mkdir -p "${APP_DIR}/downloads"

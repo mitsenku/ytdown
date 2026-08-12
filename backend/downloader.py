@@ -111,8 +111,25 @@ def get_ffmpeg_path():
         pass
     return None
 
+def _find_cookies_file() -> str | None:
+    """Find cookies.txt if provided in workspace or environment."""
+    env_cookies = os.environ.get("YTDLP_COOKIES") or os.environ.get("COOKIES_FILE")
+    if env_cookies and os.path.isfile(env_cookies):
+        return env_cookies
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    backend_dir = os.path.dirname(os.path.abspath(__file__))
+    candidates = [
+        os.path.join(backend_dir, "cookies.txt"),
+        os.path.join(base_dir, "cookies.txt"),
+    ]
+    for c in candidates:
+        if os.path.isfile(c) and os.path.getsize(c) > 0:
+            return c
+    return None
+
+
 def _secure_base_opts() -> dict:
-    """Return yt-dlp options with security hardening."""
+    """Return yt-dlp options with security hardening and VPS/datacenter botguard bypass."""
     opts = {
         "quiet": True,
         "no_warnings": True,
@@ -128,12 +145,31 @@ def _secure_base_opts() -> dict:
         "writesubtitles": False,
         # Do not set file modification time to video upload date (prevents instant cleanup deletion)
         "updatetime": False,
+        # VPS Datacenter BotGuard Bypass:
+        # Use mobile/app client extractors to bypass the web sign-in challenge on datacenter IPs
+        "extractor_args": {
+            "youtube": {
+                "player_client": ["android", "ios", "mweb", "web"],
+                "player_skip": ["configs", "webpage"],
+            }
+        },
+        "http_headers": {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
+            "Accept-Language": "en-US,en;q=0.9",
+        },
+        "socket_timeout": 30,
+        "retries": 3,
+        "fragment_retries": 5,
     }
-    
+
+    cookies_file = _find_cookies_file()
+    if cookies_file:
+        opts["cookiefile"] = cookies_file
+
     ffmpeg_path = get_ffmpeg_path()
     if ffmpeg_path:
         opts["ffmpeg_location"] = ffmpeg_path
-        
+
     return opts
 
 
