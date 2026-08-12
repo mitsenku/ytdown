@@ -121,6 +121,10 @@ def _find_cookies_file() -> str | None:
     candidates = [
         os.path.join(backend_dir, "cookies.txt"),
         os.path.join(base_dir, "cookies.txt"),
+        os.path.join(backend_dir, "www.youtube.com_cookies.txt"),
+        os.path.join(base_dir, "www.youtube.com_cookies.txt"),
+        os.path.join(backend_dir, "youtube.com_cookies.txt"),
+        os.path.join(base_dir, "youtube.com_cookies.txt"),
     ]
     for c in candidates:
         if os.path.isfile(c) and os.path.getsize(c) > 0:
